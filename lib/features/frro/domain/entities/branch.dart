@@ -6,6 +6,7 @@ class Branch extends Equatable {
   final String address;
   final String city;
   final String state;
+  final String district;
   final String pinCode;
   final String phone;
   final String email;
@@ -22,6 +23,7 @@ class Branch extends Equatable {
     required this.address,
     required this.city,
     required this.state,
+    required this.district,
     required this.pinCode,
     required this.phone,
     required this.email,
@@ -45,6 +47,7 @@ class Branch extends Equatable {
     address: '',
     city: '',
     state: '',
+    district: '',
     pinCode: '',
     phone: '',
     email: '',
@@ -60,6 +63,7 @@ class Branch extends Equatable {
     address,
     city,
     state,
+    district,
     pinCode,
     phone,
     email,

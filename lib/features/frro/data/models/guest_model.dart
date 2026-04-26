@@ -98,6 +98,7 @@ class GuestModel extends Guest {
       address: b['Branch_Address'] ?? '',
       city: b['Branch_City'] ?? '',
       state: b['Branch_State']?.toString() ?? '',
+      district: b['branch_district']?.toString() ?? '',
       pinCode: b['Branch_PinCode'] ?? '',
       phone: b['Branch_Phone'] ?? '',
       email: b['Branch_email'] ?? '',

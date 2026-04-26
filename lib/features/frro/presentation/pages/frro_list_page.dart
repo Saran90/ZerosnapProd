@@ -385,6 +385,29 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       // AddressInIndia overrides Branch_Address when set; FromGuestAddressInIndia=1 means use guest address
       fillFirst(['#applicant_refaddr','[name="applicant_refaddr"]'],
         '${e(g.branch.effectiveAddressInIndia)}');
+      // State dropdown (real FRRO field: applicant_refstate, value = Branch_State numeric code)
+      // Selecting state triggers district dropdown to load (handleDerivedSelect pattern)
+      ${g.branch.state.isNotEmpty ? """
+      (function() {
+        var stateEl = document.getElementById('applicant_refstate');
+        if (stateEl) {
+          var sv = '${e(g.branch.state)}';
+          for (var i = 0; i < stateEl.options.length; i++) {
+            if (stateEl.options[i].value === sv || stateEl.options[i].text.trim() === sv) {
+              stateEl.selectedIndex = i;
+              stateEl.dispatchEvent(new Event('change', {bubbles: true}));
+              break;
+            }
+          }
+          // After state change, district dropdown loads — select district after delay
+          ${g.branch.district.isNotEmpty ? """
+          setTimeout(function() {
+            selectFirst(['#applicant_refstatedistr','[name="applicant_refstatedistr"]'], '${e(g.branch.district)}');
+          }, 600);
+          """ : ''}
+        }
+      })();
+      """ : ''}
       fillFirst(['#applicant_refpincode','[name="applicant_refpincode"]'],
         '${e(g.branch.pinCode)}');
       // Phone in India from branch
