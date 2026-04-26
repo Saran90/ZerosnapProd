@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/di/injection_container.dart';
-import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
@@ -67,9 +66,8 @@ class _FrroListPageState extends State<_FrroListPageContent> {
   late final WebViewController _webCtrl;
   bool _loading = true;
   Guest? _selectedGuest;
-  String _hotelName = '';
 
-  static String _formFillScript(Guest g, {String hotelName = ''}) {
+  static String _formFillScript(Guest g) {
     String e(String? v) {
       if (v == null || v.isEmpty) return '';
       return v
@@ -345,8 +343,8 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       // Intended duration of stay (real FRRO field: applicant_intnddurhotel)
       fillFirst(['#applicant_intnddurhotel','#applicant_duration','#duration','[name="applicant_intnddurhotel"]','[name="applicant_duration"]','[name="duration"]'], '${stayDuration()}');
 
-      // Hotel / accommodation name
-      fillFirst(['#applicant_hotelname','#hotel_name','#accommodation_name','[name="applicant_hotelname"]','[name="hotel_name"]','[name="accommodation_name"]'], '${e(hotelName)}');
+      // Hotel / accommodation name (from Branch_Name)
+      fillFirst(['#applicant_hotelname','#hotel_name','#accommodation_name','[name="applicant_hotelname"]','[name="hotel_name"]','[name="accommodation_name"]'], '${e(g.branch.name)}');
 
       // SECTION 6: NEXT DESTINATION
       // Real FRRO radio: applicant_next_dest_country_flag_r, values: "Inside India" / "Outside India"
@@ -380,12 +378,17 @@ class _FrroListPageState extends State<_FrroListPageContent> {
 
       // SECTION 8: CONTACT DETAILS
       // Real FRRO fields: applicant_contactnoinindia, applicant_contactnoperm
-      ${g.phoneNo.isNotEmpty ? "fillFirst(['#applicant_contactnoinindia','#applicant_phone','[name=\"applicant_contactnoinindia\"]','[name=\"applicant_phone\"]'], '${e(g.phoneNo)}'); fillFirst(['#applicant_contactnoperm','#applicant_mobile','[name=\"applicant_contactnoperm\"]','[name=\"applicant_mobile\"]'], '${e(g.phoneNo)}');" : ''}
+      ${g.phoneNo.isNotEmpty ? "fillFirst(['#applicant_contactnoperm','[name=\"applicant_contactnoperm\"]'], '${e(g.phoneNo)}');" : ''}
       ${g.email.isNotEmpty ? "fillFirst(['#applicant_email','#email','[name=\"applicant_email\"]','[name=\"email\"]'], '${e(g.email)}');" : ''}
 
-      // Reference address in India (real FRRO fields: applicant_refaddr, applicant_refstate, applicant_refstatedistr, applicant_refpincode)
-      // Hotel name fills the reference address field
-      ${hotelName.isNotEmpty ? "fillFirst(['#applicant_refaddr','[name=\"applicant_refaddr\"]'], '${e(hotelName)}');" : ''}
+      // Reference address in India — from Branch data
+      // AddressInIndia overrides Branch_Address when set; FromGuestAddressInIndia=1 means use guest address
+      fillFirst(['#applicant_refaddr','[name="applicant_refaddr"]'],
+        '${e(g.branch.effectiveAddressInIndia)}');
+      fillFirst(['#applicant_refpincode','[name="applicant_refpincode"]'],
+        '${e(g.branch.pinCode)}');
+      // Phone in India from branch
+      ${g.branch.effectivePhone.isNotEmpty ? "fillFirst(['#applicant_contactnoinindia','[name=\"applicant_contactnoinindia\"]'], '${e(g.branch.effectivePhone)}');" : ''}
 
       // SECTION 9: PERMANENT ADDRESS (Address in country where residing permanently)
       // Populated from passport data: countryOfIssueText → address, city → city, nationality → country
@@ -408,18 +411,9 @@ class _FrroListPageState extends State<_FrroListPageContent> {
   """;
   }
 
-  Future<void> _loadHotelName() async {
-    final prefs = SharedPreferencesProvider();
-    final session = await prefs.getLoginSession();
-    if (session != null && session.hotelName.isNotEmpty) {
-      setState(() => _hotelName = session.hotelName);
-    }
-  }
-
   @override
   void initState() {
     super.initState();
-    _loadHotelName();
     _webCtrl = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -438,9 +432,7 @@ class _FrroListPageState extends State<_FrroListPageContent> {
                 lower.contains('addcform')) {
               // Form page — fill guest data if one is selected
               if (_selectedGuest != null) {
-                await _webCtrl.runJavaScript(
-                  _formFillScript(_selectedGuest!, hotelName: _hotelName),
-                );
+                await _webCtrl.runJavaScript(_formFillScript(_selectedGuest!));
               }
             } else {
               // Any other page — try credentials in case it's a login redirect
@@ -469,9 +461,7 @@ class _FrroListPageState extends State<_FrroListPageContent> {
               if (lower.contains('formc.jsp') ||
                   lower.contains('newcform') ||
                   lower.contains('addcform')) {
-                _webCtrl.runJavaScript(
-                  _formFillScript(guest, hotelName: _hotelName),
-                );
+                _webCtrl.runJavaScript(_formFillScript(guest));
               }
             }
           });
