@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../scan/presentation/pages/card_scan_page.dart';
 import '../../../scan/presentation/pages/mrz_scanner_page.dart';
-import '../../../scan/presentation/pages/passport_card_scan_page.dart';
 
 enum DomesticCardType { drivingLicense, aadhar, votersId, panCard, otherId }
 
@@ -176,7 +175,9 @@ class _ChooseCardDialog extends StatelessWidget {
               final nav = Navigator.of(context);
               nav.pop();
               nav.push(
-                MaterialPageRoute(builder: (_) => const PassportCardScanPage()),
+                MaterialPageRoute(
+                  builder: (_) => const MrzScannerPage(title: 'Scan Passport'),
+                ),
               );
             },
             child: const Padding(
