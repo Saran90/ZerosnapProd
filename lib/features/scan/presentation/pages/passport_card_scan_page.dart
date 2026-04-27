@@ -8,7 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../data/repositories/passport_repository.dart';
+import '../../domain/entities/mrz_result.dart';
 import '../widgets/signature_pad.dart';
+import 'mrz_scanner_page.dart';
 
 /// Passport flow from the "Choose Card" (National card) section.
 /// Mirrors the Android project's National card → Passport path:
@@ -31,6 +33,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 
   // ── Signature ─────────────────────────────────────────────────────────────
   Uint8List? _signatureBytes;
+
+  // Portrait from MRZ scan (base64) — used when no profile image file is captured
+  String? _mrzPortraitBase64;
 
   // ── Passport fields ───────────────────────────────────────────────────────
   final _surnameCtrl = TextEditingController();
@@ -61,7 +66,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _nextDestCtrl = TextEditingController();
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
-  bool _isExtracting = false;
   bool _isSubmitting = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -252,71 +256,31 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
-  // ── OCR Extract ───────────────────────────────────────────────────────────
-  Future<void> _extract() async {
-    if (_frontImagePath.isEmpty) {
-      _showSnack('Please capture the passport front image first');
-      return;
-    }
-    setState(() => _isExtracting = true);
-    try {
-      final frontBytes = await File(_frontImagePath).readAsBytes();
-      final frontBase64 = base64Encode(frontBytes);
-      String? backBase64;
-      if (_backImagePath.isNotEmpty) {
-        final backBytes = await File(_backImagePath).readAsBytes();
-        backBase64 = base64Encode(backBytes);
-      }
-
-      // Use the passport OCR endpoint via the existing extract mechanism
-      final result = await PassportRepository().extractPassport(
-        frontBase64: frontBase64,
-        backBase64: backBase64,
-      );
-
-      if (result != null) {
-        _fillFromOcr(result);
-        _showSnack('Details extracted successfully', isError: false);
-      } else {
-        _showSnack('Could not extract details. Please fill manually.');
-      }
-    } catch (e) {
-      _showSnack('Extraction failed: $e');
-    } finally {
-      if (mounted) setState(() => _isExtracting = false);
-    }
-  }
-
-  void _fillFromOcr(Map<String, dynamic> data) {
+  // ── MRZ Scan ──────────────────────────────────────────────────────────────
+  Future<void> _scanPassport() async {
+    final result = await Navigator.of(context).push<MrzResult>(
+      MaterialPageRoute(
+        builder: (_) => const MrzScannerPage(title: 'Scan Passport'),
+      ),
+    );
+    if (result == null) return;
     setState(() {
-      _surnameCtrl.text = data['surname'] as String? ?? '';
-      _givenNamesCtrl.text =
-          data['given_names'] as String? ?? data['name'] as String? ?? '';
-      _docNoCtrl.text =
-          data['document_number'] as String? ??
-          data['passport_number'] as String? ??
-          '';
-      _nationalityCtrl.text = data['nationality'] as String? ?? '';
-      _issuingCountryCtrl.text =
-          data['issuing_country'] as String? ??
-          data['country_of_issue'] as String? ??
-          '';
-      _dobCtrl.text =
-          data['date_of_birth'] as String? ?? data['dob'] as String? ?? '';
-      _issuingDateCtrl.text = data['date_of_issue'] as String? ?? '';
-      _expiryDateCtrl.text =
-          data['expiry_date'] as String? ??
-          data['date_of_expiry'] as String? ??
-          '';
-      _placeOfIssueCtrl.text = data['place_of_issue'] as String? ?? '';
-      _addressCtrl.text = data['address'] as String? ?? '';
-      final gender = (data['sex'] ?? data['gender'] ?? '')
-          .toString()
-          .toUpperCase();
-      if (gender.startsWith('M'))
-        _sex = 'M';
-      else if (gender.startsWith('F'))
-        _sex = 'F';
+      _surnameCtrl.text = result.surname ?? '';
+      _givenNamesCtrl.text = result.givenNames ?? '';
+      _docNoCtrl.text = result.documentNumber ?? '';
+      _nationalityCtrl.text = result.nationality ?? '';
+      _issuingCountryCtrl.text = result.issuingCountry ?? '';
+      _dobCtrl.text = result.dateOfBirth ?? '';
+      _issuingDateCtrl.text = result.estIssuingDateReadable ?? '';
+      _expiryDateCtrl.text = result.expiryDate ?? '';
+      if (result.sex != null && ['M', 'F', 'O'].contains(result.sex)) {
+        _sex = result.sex!;
+      }
+      // Use portrait from MRZ scan as profile image base64 if available
+      if (result.portrait != null && result.portrait!.isNotEmpty) {
+        _profileImagePath = ''; // clear file path — portrait comes from MRZ
+        _mrzPortraitBase64 = result.portrait;
+      }
     });
   }
 
@@ -336,7 +300,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           : '';
       final profileBase64 = _profileImagePath.isNotEmpty
           ? base64Encode(await File(_profileImagePath).readAsBytes())
-          : '';
+          : (_mrzPortraitBase64 ?? '');
 
       final body = <String, dynamic>{
         'guest_Firstname': _givenNamesCtrl.text,
@@ -489,25 +453,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
-  // ── Extract button ────────────────────────────────────────────────────────
+  // ── MRZ scan button ───────────────────────────────────────────────────────
   Widget _buildExtractButton() {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: _isExtracting ? null : _extract,
-        icon: _isExtracting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            : const Icon(Icons.document_scanner_outlined),
-        label: Text(
-          _isExtracting ? 'Extracting...' : 'Extract Details from Image',
-        ),
+        onPressed: _scanPassport,
+        icon: const Icon(Icons.document_scanner_outlined),
+        label: const Text('Scan Passport (MRZ)'),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
           side: const BorderSide(color: AppColors.primary),
