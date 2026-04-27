@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../scan/presentation/pages/card_scan_page.dart';
+import '../../../scan/presentation/pages/mrz_scanner_page.dart';
 
 enum DomesticCardType { drivingLicense, aadhar, votersId, panCard, otherId }
 
@@ -17,6 +19,69 @@ extension DomesticCardTypeLabel on DomesticCardType {
         return 'Other ID';
     }
   }
+}
+
+/// Shows the passport source picker (Camera / Upload).
+/// Extracted here so both [showChooseCardDialog] and [scan_card_dialog] can use it.
+void showPassportSourceDialog(BuildContext context) {
+  final nav = Navigator.of(context);
+  showDialog(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.5),
+    builder: (dialogCtx) => Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/icons/ic_upload.png',
+              width: 72,
+              height: 72,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 28),
+            _PassportOptionButton(
+              label: 'Open Camera',
+              onTap: () {
+                Navigator.of(dialogCtx).pop();
+                nav.push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const MrzScannerPage(title: 'Scan Passport'),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _PassportOptionButton(
+              label: 'Upload',
+              onTap: () {
+                Navigator.of(dialogCtx).pop();
+                nav.push(
+                  MaterialPageRoute(
+                    builder: (_) => const MrzScannerPage(
+                      title: 'Upload Passport',
+                      fromGallery: true,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _PassportOptionButton(
+              label: 'Cancel',
+              filled: false,
+              onTap: () => Navigator.of(dialogCtx).pop(),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 void showChooseCardDialog(
@@ -47,13 +112,13 @@ class _ChooseCardDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Light blue header ───────────────────────────────────
+          // ── Header ──────────────────────────────────────────────
           Container(
             width: double.infinity,
             color: const Color(0xFFDCF0FA),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             child: const Text(
-              'Chose Card',
+              'Choose Card',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -62,16 +127,20 @@ class _ChooseCardDialog extends StatelessWidget {
             ),
           ),
 
-          // ── Options list ────────────────────────────────────────
+          // ── Domestic card options ────────────────────────────────
           ...List.generate(options.length, (i) {
-            final isLast = i == options.length - 1;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 InkWell(
                   onTap: () {
-                    Navigator.of(context).pop();
-                    onSelected(options[i]);
+                    final nav = Navigator.of(context);
+                    nav.pop();
+                    nav.push(
+                      MaterialPageRoute(
+                        builder: (_) => CardScanPage(cardType: options[i]),
+                      ),
+                    );
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -91,18 +160,88 @@ class _ChooseCardDialog extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (!isLast)
-                  const Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Color(0xFFE0E0E0),
-                  ),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFE0E0E0),
+                ),
               ],
             );
           }),
 
+          // ── Passport option ──────────────────────────────────────
+          InkWell(
+            onTap: () {
+              Navigator.of(context).pop();
+              showPassportSourceDialog(context);
+            },
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Passport',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           const SizedBox(height: 8),
         ],
+      ),
+    );
+  }
+}
+
+class _PassportOptionButton extends StatelessWidget {
+  final String label;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _PassportOptionButton({
+    required this.label,
+    required this.onTap,
+    this.filled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: filled ? const Color(0xFF29ABE2) : Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          border: filled
+              ? null
+              : Border.all(color: const Color(0xFF29ABE2), width: 1.5),
+          boxShadow: filled
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF29ABE2).withValues(alpha: 0.30),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: filled ? Colors.white : const Color(0xFF2C3E50),
+            letterSpacing: 0.3,
+          ),
+        ),
       ),
     );
   }

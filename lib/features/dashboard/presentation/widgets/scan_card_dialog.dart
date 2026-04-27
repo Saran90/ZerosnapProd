@@ -50,7 +50,7 @@ class _ScanCardDialog extends StatelessWidget {
               label: 'Scan Passport',
               onTap: () {
                 Navigator.of(context).pop();
-                // TODO: navigate to passport scan
+                showPassportSourceDialog(context);
               },
             ),
           ],
