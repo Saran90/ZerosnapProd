@@ -95,7 +95,9 @@ class ApiBaseHelper {
     switch (response.statusCode) {
       case 200:
       case 422:
-        return jsonDecode(response.body);
+        final body = response.body.trim();
+        if (body.isEmpty) return null; // empty body → caller decides meaning
+        return jsonDecode(body);
       case 400:
         throw ServerException('Bad request: ${response.body}');
       case 401:

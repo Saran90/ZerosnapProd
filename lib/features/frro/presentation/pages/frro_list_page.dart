@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../../../core/di/injection_container.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
@@ -17,10 +16,9 @@ class FrroListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<GuestListBloc>()..add(const LoadGuestList(branchId: 5)),
-      child: const _FrroListPageContent(),
-    );
+    // Load guest list when page opens
+    context.read<GuestListBloc>().add(const LoadGuestList(branchId: 5));
+    return const _FrroListPageContent();
   }
 }
 
@@ -445,6 +443,16 @@ class _FrroListPageState extends State<_FrroListPageContent> {
           onPageFinished: (url) async {
             setState(() => _loading = false);
             final lower = url.toLowerCase();
+
+            // Submission detection — track submission but don't call API
+            // API should only be called when user clicks Check-in button
+            if (_isSubmissionUrl(lower)) {
+              if (_selectedGuest != null) {
+                await _trackSubmission(_selectedGuest!);
+              }
+              return; // Do not run credential/form-fill scripts on submission pages
+            }
+
             // Login page — fill credentials
             if (lower.contains('formc') &&
                 !lower.contains('formc.jsp') &&
@@ -465,6 +473,27 @@ class _FrroListPageState extends State<_FrroListPageContent> {
         ),
       )
       ..loadRequest(Uri.parse(_frroUrl));
+  }
+
+  /// Returns true if [lowerUrl] is one of the two known FRRO submission
+  /// confirmation pages: svnext.jsp (Temporary Save and Exit) or
+  /// /ext.jsp (Save and Continue).
+  bool _isSubmissionUrl(String lowerUrl) {
+    return lowerUrl.contains('svnext.jsp') || lowerUrl.contains('/ext.jsp');
+  }
+
+  /// Called when a submission URL is detected. Dispatches FrroSubmitted event
+  /// to update guest list state without showing any notification.
+  Future<void> _trackSubmission(Guest guest) async {
+    // Dispatch FrroSubmitted event to update guest list state
+    if (mounted) {
+      context.read<GuestListBloc>().add(
+        FrroSubmitted(
+          guestdataId: guest.guestdataId,
+          applicationId: '', // No application ID tracking
+        ),
+      );
+    }
   }
 
   void _showGuestSheet(List<Guest> guests) {
@@ -495,69 +524,100 @@ class _FrroListPageState extends State<_FrroListPageContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(AppRoutes.guestList),
-        ),
-        title: const Text(
-          'FRRO Guest List',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _webCtrl),
-          if (_loading)
-            const LinearProgressIndicator(
-              backgroundColor: Colors.transparent,
-              color: AppColors.primary,
+    return BlocListener<GuestListBloc, GuestListState>(
+      listener: (context, state) {
+        if (state is GuestCheckInSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('FRRO submitted successfully'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
             ),
-        ],
-      ),
-      floatingActionButton: BlocBuilder<GuestListBloc, GuestListState>(
-        builder: (context, state) {
-          return FloatingActionButton.small(
-            onPressed: () {
-              if (state is GuestListLoaded) {
-                _showGuestSheet(state.guests);
-              } else if (state is GuestListError) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(state.message)));
-              }
-            },
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            elevation: 4,
-            tooltip: 'Guest list',
-            child: state is GuestListLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.people_outline_rounded, size: 22),
           );
-        },
+          context.read<GuestListBloc>().add(const LoadGuestList(branchId: 5));
+        } else if (state is GuestCheckInFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('FRRO submission failed: ${state.message}'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go(AppRoutes.guestList),
+          ),
+          title: const Text(
+            'FRRO Guest List',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _webCtrl),
+            if (_loading)
+              const LinearProgressIndicator(
+                backgroundColor: Colors.transparent,
+                color: AppColors.primary,
+              ),
+          ],
+        ),
+        floatingActionButton: BlocBuilder<GuestListBloc, GuestListState>(
+          builder: (context, state) {
+            // Only show guest list button
+            return FloatingActionButton.small(
+              onPressed: () {
+                if (state is GuestListLoaded) {
+                  _showGuestSheet(state.guests);
+                } else if (state is GuestListError) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(state.message)));
+                }
+              },
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              tooltip: 'Guest list',
+              child: state is GuestListLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.people_outline_rounded, size: 22),
+            );
+          },
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
