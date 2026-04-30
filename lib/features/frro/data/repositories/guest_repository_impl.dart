@@ -78,4 +78,22 @@ class GuestRepositoryImpl implements GuestRepository {
       return Left(ServerFailure('Unexpected error: $e'));
     }
   }
+
+  @override
+  Future<Either<Failure, bool>> updateFrroSubmissionStatus({
+    required int guestdataId,
+  }) async {
+    try {
+      final success = await remoteDataSource.updateFrroSubmissionStatus(
+        guestdataId: guestdataId,
+      );
+      return Right(success);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } on NetworkException {
+      return const Left(NetworkFailure());
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: $e'));
+    }
+  }
 }

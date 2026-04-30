@@ -70,13 +70,12 @@ class CheckOutGuest extends GuestListEvent {
 }
 
 /// Fired when the FRRO WebView navigates to a submission confirmation URL.
-/// Updates local state only — does NOT call any API.
+/// Calls the UpdateFRROBeforeCheckInStatusMobile API.
 class FrroSubmitted extends GuestListEvent {
   final int guestdataId;
-  final String applicationId;
 
-  const FrroSubmitted({required this.guestdataId, required this.applicationId});
+  const FrroSubmitted({required this.guestdataId});
 
   @override
-  List<Object?> get props => [guestdataId, applicationId];
+  List<Object?> get props => [guestdataId];
 }

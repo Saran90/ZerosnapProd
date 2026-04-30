@@ -34,6 +34,11 @@ class ApiConstants {
   static const String countries = '/api/GetNationalityList';
 
   // Check-in / Check-out
-  static const String updateFrroStatus = 'UpdateFRROStatusForChrome';
-  static const String updateCheckOutStatus = 'UpdateFRROCheckOutStatusChrome';
+  static const String getGuestData = '/api/GetFrroGuestDataMobile';
+  static const String updateFrroBeforeCheckInStatus =
+      '/api/UpdateFRROBeforeCheckInStatusMobile';
+  static const String updateCheckInStatus =
+      '/api/UpdateFRROCheckInStatusMobile';
+  static const String updateCheckOutStatus =
+      '/api/UpdateFRROCheckOutStatusMobile';
 }

@@ -23,25 +23,10 @@ class GuestListLoaded extends GuestListState {
   final List<Guest> guests;
   final int btnStatusOfCheckINOUT;
 
-  /// Guest IDs that have been submitted to FRRO locally (not yet checked in via API).
-  final Set<int> frroSubmittedIds;
-
-  const GuestListLoaded(
-    this.guests, {
-    this.btnStatusOfCheckINOUT = 0,
-    this.frroSubmittedIds = const {},
-  });
-
-  GuestListLoaded copyWithSubmitted(int guestdataId) {
-    return GuestListLoaded(
-      guests,
-      btnStatusOfCheckINOUT: btnStatusOfCheckINOUT,
-      frroSubmittedIds: {...frroSubmittedIds, guestdataId},
-    );
-  }
+  const GuestListLoaded(this.guests, {this.btnStatusOfCheckINOUT = 0});
 
   @override
-  List<Object?> get props => [guests, btnStatusOfCheckINOUT, frroSubmittedIds];
+  List<Object?> get props => [guests, btnStatusOfCheckINOUT];
 }
 
 class GuestListError extends GuestListState {

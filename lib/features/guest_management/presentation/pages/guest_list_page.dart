@@ -2,6 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../frro/domain/entities/guest.dart';
@@ -15,10 +16,6 @@ class GuestListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Load guest list when page opens
-    context.read<GuestListBloc>().add(
-      const LoadGuestList(branchId: 5, btnStatusOfCheckINOUT: 0),
-    );
     return const _GuestListPageContent();
   }
 }
@@ -31,18 +28,51 @@ class _GuestListPageContent extends StatefulWidget {
 }
 
 class _GuestListPageState extends State<_GuestListPageContent>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+    with TickerProviderStateMixin {
+  late TabController _tabController;
   final _searchCtrl = TextEditingController();
   String _query = '';
 
+  /// null = not yet loaded (show nothing to avoid layout flash)
+  /// true  = show both Check-in and Check-out tabs
+  /// false = show Check-in tab only (no blank space)
+  bool? _showCheckOut;
+
   static const int _branchId = 5;
+
+  /// Maps tab index to the API's btnStatusOfCheckINOUT value.
+  /// Tab 0 (Check-in)  → 1
+  /// Tab 1 (Check-out) → 2  (only when _showCheckOut is true)
+  int get _apiStatus => _tabController.index + 1;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Initialise with length 1 as a safe placeholder — will be rebuilt
+    // immediately once _loadCheckOutVisibility completes.
+    _tabController = TabController(length: 1, vsync: this);
+    _loadCheckOutVisibility();
+  }
+
+  Future<void> _loadCheckOutVisibility() async {
+    final session = await SharedPreferencesProvider().getLoginSession();
+    if (!mounted) return;
+    final show = session?.showFrroCheckOutInExt ?? true;
+
+    // Rebuild tab controller with the correct length
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    _tabController = TabController(length: show ? 2 : 1, vsync: this);
     _tabController.addListener(_onTabChanged);
+
+    setState(() => _showCheckOut = show);
+
+    // Trigger initial guest list load now that we know the correct tab count
+    if (mounted) {
+      context.read<GuestListBloc>().add(
+        const LoadGuestList(branchId: _branchId, btnStatusOfCheckINOUT: 1),
+      );
+    }
   }
 
   void _onTabChanged() {
@@ -50,19 +80,13 @@ class _GuestListPageState extends State<_GuestListPageContent>
     _searchCtrl.clear();
     setState(() => _query = '');
     context.read<GuestListBloc>().add(
-      LoadGuestList(
-        branchId: _branchId,
-        btnStatusOfCheckINOUT: _tabController.index,
-      ),
+      LoadGuestList(branchId: _branchId, btnStatusOfCheckINOUT: _apiStatus),
     );
   }
 
   void _refresh() {
     context.read<GuestListBloc>().add(
-      RefreshGuestList(
-        branchId: _branchId,
-        btnStatusOfCheckINOUT: _tabController.index,
-      ),
+      RefreshGuestList(branchId: _branchId, btnStatusOfCheckINOUT: _apiStatus),
     );
   }
 
@@ -89,6 +113,10 @@ class _GuestListPageState extends State<_GuestListPageContent>
 
   @override
   Widget build(BuildContext context) {
+    // Show nothing until the checkout visibility flag is loaded from prefs.
+    // This prevents any blank-space flash before the correct layout is known.
+    if (_showCheckOut == null) return const Scaffold();
+
     return Scaffold(
       backgroundColor: const Color(0xFFDEEFF8),
       appBar: AppBar(
@@ -112,33 +140,35 @@ class _GuestListPageState extends State<_GuestListPageContent>
             ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.login_outlined, size: 18),
-              text: 'Check-in',
-              iconMargin: EdgeInsets.only(bottom: 2),
-            ),
-            Tab(
-              icon: Icon(Icons.logout_outlined, size: 18),
-              text: 'Check-out',
-              iconMargin: EdgeInsets.only(bottom: 2),
-            ),
-          ],
-        ),
+        bottom: _showCheckOut!
+            ? TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.login_outlined, size: 18),
+                    text: 'Check-in',
+                    iconMargin: EdgeInsets.only(bottom: 2),
+                  ),
+                  Tab(
+                    icon: Icon(Icons.logout_outlined, size: 18),
+                    text: 'Check-out',
+                    iconMargin: EdgeInsets.only(bottom: 2),
+                  ),
+                ],
+              )
+            : null,
       ),
       body: Column(
         children: [
@@ -207,8 +237,7 @@ class _GuestListPageState extends State<_GuestListPageContent>
 
                 if (state is GuestListLoaded) {
                   final guests = _filter(state.guests);
-                  final isCheckOut = state.btnStatusOfCheckINOUT == 1;
-                  final frroSubmittedIds = state.frroSubmittedIds;
+                  final isCheckOut = state.btnStatusOfCheckINOUT == 2;
 
                   if (guests.isEmpty) {
                     return _EmptyView(
@@ -221,13 +250,8 @@ class _GuestListPageState extends State<_GuestListPageContent>
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     itemCount: guests.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _GuestCard(
-                      guest: guests[i],
-                      isCheckOutTab: isCheckOut,
-                      isFrroSubmittedLocally: frroSubmittedIds.contains(
-                        guests[i].guestdataId,
-                      ),
-                    ),
+                    itemBuilder: (_, i) =>
+                        _GuestCard(guest: guests[i], isCheckOutTab: isCheckOut),
                   );
                 }
 
@@ -312,13 +336,8 @@ class _GuestListPageState extends State<_GuestListPageContent>
 class _GuestCard extends StatefulWidget {
   final Guest guest;
   final bool isCheckOutTab;
-  final bool isFrroSubmittedLocally;
 
-  const _GuestCard({
-    required this.guest,
-    required this.isCheckOutTab,
-    this.isFrroSubmittedLocally = false,
-  });
+  const _GuestCard({required this.guest, required this.isCheckOutTab});
 
   @override
   State<_GuestCard> createState() => _GuestCardState();
@@ -461,7 +480,7 @@ class _GuestCardState extends State<_GuestCard> {
           context.read<GuestListBloc>().add(
             const RefreshGuestList(
               branchId: _branchId,
-              btnStatusOfCheckINOUT: 0,
+              btnStatusOfCheckINOUT: 1,
             ),
           );
         }
@@ -504,7 +523,7 @@ class _GuestCardState extends State<_GuestCard> {
           context.read<GuestListBloc>().add(
             const RefreshGuestList(
               branchId: _branchId,
-              btnStatusOfCheckINOUT: 1,
+              btnStatusOfCheckINOUT: 2,
             ),
           );
         }
@@ -610,7 +629,6 @@ class _GuestCardState extends State<_GuestCard> {
                         _StatusBadge(
                           isCheckOutTab: widget.isCheckOutTab,
                           guest: widget.guest,
-                          isFrroSubmittedLocally: widget.isFrroSubmittedLocally,
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -800,21 +818,33 @@ class _GuestCardState extends State<_GuestCard> {
 class _StatusBadge extends StatelessWidget {
   final bool isCheckOutTab;
   final Guest guest;
-  final bool isFrroSubmittedLocally;
 
-  const _StatusBadge({
-    required this.isCheckOutTab,
-    required this.guest,
-    this.isFrroSubmittedLocally = false,
-  });
+  const _StatusBadge({required this.isCheckOutTab, required this.guest});
 
   @override
   Widget build(BuildContext context) {
-    final (label, bg, fg) = isCheckOutTab
-        ? ('Checked In', const Color(0xFFE8F5E9), const Color(0xFF27AE60))
-        : isFrroSubmittedLocally
-        ? ('FRRO Submitted', const Color(0xFFE3F2FD), const Color(0xFF1976D2))
-        : ('Pending', const Color(0xFFFFF3E0), const Color(0xFFF57C00));
+    final (label, bg, fg) = switch (guest.frroStatus) {
+      FrroStatus.newGuest => (
+        'Pending',
+        const Color(0xFFFFF3E0),
+        const Color(0xFFF57C00),
+      ),
+      FrroStatus.submittedToFrro => (
+        'FRRO Submitted',
+        const Color(0xFFE3F2FD),
+        const Color(0xFF1976D2),
+      ),
+      FrroStatus.checkInCompleted => (
+        'Checked In',
+        const Color(0xFFE8F5E9),
+        const Color(0xFF27AE60),
+      ),
+      FrroStatus.checkoutCompleted => (
+        'Checked Out',
+        const Color(0xFFF3E5F5),
+        const Color(0xFF7B1FA2),
+      ),
+    };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),

@@ -24,6 +24,8 @@ abstract class GuestRemoteDataSource {
     required int branchId,
     int userId = 0,
   });
+
+  Future<bool> updateFrroSubmissionStatus({required int guestdataId});
 }
 
 class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
@@ -32,10 +34,7 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
 
   GuestRemoteDataSourceImpl({required this.apiHelper, required this.prefs});
 
-  // Fixed base URL for the guest list / check-in service
-  static const String _guestBaseUrl =
-      'http://smartcheckindev.atintellilabs.live/api/';
-
+  Future<String> get _baseUrl => prefs.getBaseUrl();
   Future<String> get _token => prefs.getAccessToken();
 
   @override
@@ -45,14 +44,13 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
     int btnStatusOfCheckINOUT = 0,
   }) async {
     try {
+      final url = await _baseUrl;
       final token = await _token;
       final response = await apiHelper.post(
-        'GuestDataForChrome',
-        baseUrl: _guestBaseUrl,
+        ApiConstants.getGuestData,
+        baseUrl: url,
         body: {
           'Guestdata_id': 0,
-          'Branch_ID': branchId,
-          'User_ID': userId,
           'btnStatusOfCheckINOUT': btnStatusOfCheckINOUT,
         },
         headers: {'Authorization': 'Bearer $token'},
@@ -83,11 +81,12 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
     int userId = 0,
   }) async {
     try {
+      final url = await _baseUrl;
       final token = await _token;
       final response =
           await apiHelper.post(
-                ApiConstants.updateFrroStatus,
-                baseUrl: _guestBaseUrl,
+                ApiConstants.updateCheckInStatus,
+                baseUrl: url,
                 body: {
                   'Guestdata_id': guestdataId,
                   'Branch_ID': branchId,
@@ -114,11 +113,12 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
     int userId = 0,
   }) async {
     try {
+      final url = await _baseUrl;
       final token = await _token;
       final response =
           await apiHelper.post(
                 ApiConstants.updateCheckOutStatus,
-                baseUrl: _guestBaseUrl,
+                baseUrl: url,
                 body: {
                   'Guestdata_id': guestdataId,
                   'Branch_ID': branchId,
@@ -134,6 +134,29 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
     } catch (e) {
       if (e is ServerException || e is NetworkException) rethrow;
       throw ServerException('Check-out failed: $e');
+    }
+  }
+
+  @override
+  Future<bool> updateFrroSubmissionStatus({required int guestdataId}) async {
+    try {
+      final url = await _baseUrl;
+      final token = await _token;
+      final response =
+          await apiHelper.post(
+                ApiConstants.updateFrroBeforeCheckInStatus,
+                baseUrl: url,
+                body: {'Guestdata_id': guestdataId},
+                headers: {'Authorization': 'Bearer $token'},
+              )
+              as Map<String, dynamic>;
+
+      final status =
+          response['Status'] as int? ?? response['status'] as int? ?? 0;
+      return status == 1;
+    } catch (e) {
+      if (e is ServerException || e is NetworkException) rethrow;
+      throw ServerException('FRRO submission status update failed: $e');
     }
   }
 }

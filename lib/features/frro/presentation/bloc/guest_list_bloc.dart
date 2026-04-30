@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/usecases/check_in_guest.dart';
 import '../../domain/usecases/check_out_guest.dart';
 import '../../domain/usecases/get_guest_list.dart';
+import '../../domain/usecases/update_frro_submission_status.dart';
 import 'guest_list_event.dart';
 import 'guest_list_state.dart';
 
@@ -10,11 +11,13 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
   final GetGuestList getGuestList;
   final CheckInGuestUseCase checkInGuest;
   final CheckOutGuestUseCase checkOutGuest;
+  final UpdateFrroSubmissionStatusUseCase updateFrroSubmissionStatus;
 
   GuestListBloc({
     required this.getGuestList,
     required this.checkInGuest,
     required this.checkOutGuest,
+    required this.updateFrroSubmissionStatus,
   }) : super(GuestListInitial()) {
     on<LoadGuestList>(_onLoadGuestList);
     on<RefreshGuestList>(_onRefreshGuestList);
@@ -22,12 +25,6 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
     on<CheckOutGuest>(_onCheckOutGuest);
     on<FrroSubmitted>(_onFrroSubmitted);
   }
-
-  /// Returns the current set of locally-submitted FRRO guest IDs,
-  /// preserved across list reloads so badges persist.
-  Set<int> get _currentSubmittedIds => state is GuestListLoaded
-      ? (state as GuestListLoaded).frroSubmittedIds
-      : {};
 
   Future<void> _onLoadGuestList(
     LoadGuestList event,
@@ -53,12 +50,20 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
     );
   }
 
-  /// Handles local FRRO submission tracking — no API call, just updates
-  /// the in-memory set of submitted guest IDs.
-  void _onFrroSubmitted(FrroSubmitted event, Emitter<GuestListState> emit) {
-    if (state is GuestListLoaded) {
-      emit((state as GuestListLoaded).copyWithSubmitted(event.guestdataId));
-    }
+  /// Calls the UpdateFRROBeforeCheckInStatusMobile API when FRRO is submitted,
+  /// then reloads the guest list so the updated status is reflected from the server.
+  Future<void> _onFrroSubmitted(
+    FrroSubmitted event,
+    Emitter<GuestListState> emit,
+  ) async {
+    await updateFrroSubmissionStatus(guestdataId: event.guestdataId);
+
+    // Reload the guest list so the server-side FRRO submission status is reflected
+    final currentState = state;
+    final branchId = currentState is GuestListLoaded
+        ? 5 // use default branchId
+        : 5;
+    await _fetchGuests(branchId, 0, 1, emit);
   }
 
   Future<void> _onCheckInGuest(
@@ -140,8 +145,6 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
     int btnStatusOfCheckINOUT,
     Emitter<GuestListState> emit,
   ) async {
-    // Preserve locally-submitted IDs across reloads
-    final submittedIds = _currentSubmittedIds;
     emit(GuestListLoading(btnStatusOfCheckINOUT: btnStatusOfCheckINOUT));
     final result = await getGuestList(
       GetGuestListParams(
@@ -159,11 +162,7 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
         ),
       ),
       (guests) => emit(
-        GuestListLoaded(
-          guests,
-          btnStatusOfCheckINOUT: btnStatusOfCheckINOUT,
-          frroSubmittedIds: submittedIds,
-        ),
+        GuestListLoaded(guests, btnStatusOfCheckINOUT: btnStatusOfCheckINOUT),
       ),
     );
   }

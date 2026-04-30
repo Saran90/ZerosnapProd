@@ -2,6 +2,18 @@ import 'package:equatable/equatable.dart';
 
 import 'branch.dart';
 
+/// Guest_PassToFRRO values:
+///   0 = New guest
+///   1 = Submitted to FRRO
+///   2 = Check-in completed
+///   3 = Checkout completed
+enum FrroStatus {
+  newGuest,
+  submittedToFrro,
+  checkInCompleted,
+  checkoutCompleted,
+}
+
 /// Guest entity representing a hotel guest with their details
 class Guest extends Equatable {
   final int guestdataId;
@@ -35,7 +47,7 @@ class Guest extends Equatable {
   final String checkOutDate;
   final String checkOutTime;
   final String profilePic;
-  final int passToFRRO;
+  final int passToFRRO; // 0=New, 1=Submitted, 2=CheckIn, 3=Checkout
   final int isCheckOut;
   final String dateOfArrivalInIndia;
   final String arrivedFromCountry;
@@ -94,9 +106,28 @@ class Guest extends Equatable {
 
   String get formattedCheckOut => '$checkOutDate $checkOutTime';
 
-  bool get isSyncedToFRRO => passToFRRO == 1;
+  /// Derived status from Guest_PassToFRRO
+  FrroStatus get frroStatus {
+    switch (passToFRRO) {
+      case 1:
+        return FrroStatus.submittedToFrro;
+      case 2:
+        return FrroStatus.checkInCompleted;
+      case 3:
+        return FrroStatus.checkoutCompleted;
+      default:
+        return FrroStatus.newGuest;
+    }
+  }
 
-  bool get isCheckedOut => isCheckOut == 1;
+  bool get isNewGuest => passToFRRO == 0;
+  bool get isFRROSubmitted => passToFRRO == 1;
+  bool get isCheckInCompleted => passToFRRO == 2;
+  bool get isCheckoutCompleted => passToFRRO == 3;
+
+  /// Legacy helpers kept for compatibility
+  bool get isSyncedToFRRO => passToFRRO >= 1;
+  bool get isCheckedOut => passToFRRO == 3;
 
   @override
   List<Object?> get props => [

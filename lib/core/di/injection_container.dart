@@ -7,6 +7,7 @@ import '../../features/frro/domain/repositories/guest_repository.dart';
 import '../../features/frro/domain/usecases/check_in_guest.dart';
 import '../../features/frro/domain/usecases/check_out_guest.dart';
 import '../../features/frro/domain/usecases/get_guest_list.dart';
+import '../../features/frro/domain/usecases/update_frro_submission_status.dart';
 import '../../features/frro/presentation/bloc/guest_list_bloc.dart';
 import '../network/api_base_helper.dart';
 import '../network/shared_preferences_provider.dart';
@@ -45,6 +46,7 @@ void _initFrroFeature() {
   sl.registerLazySingleton(() => GetGuestList(sl()));
   sl.registerLazySingleton(() => CheckInGuestUseCase(sl()));
   sl.registerLazySingleton(() => CheckOutGuestUseCase(sl()));
+  sl.registerLazySingleton(() => UpdateFrroSubmissionStatusUseCase(sl()));
 
   // BLoC
   sl.registerFactory(
@@ -52,6 +54,7 @@ void _initFrroFeature() {
       getGuestList: sl(),
       checkInGuest: sl<CheckInGuestUseCase>(),
       checkOutGuest: sl<CheckOutGuestUseCase>(),
+      updateFrroSubmissionStatus: sl<UpdateFrroSubmissionStatusUseCase>(),
     ),
   );
 }

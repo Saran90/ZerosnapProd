@@ -21,4 +21,8 @@ abstract class GuestRepository {
     required int branchId,
     int userId = 0,
   });
+
+  Future<Either<Failure, bool>> updateFrroSubmissionStatus({
+    required int guestdataId,
+  });
 }

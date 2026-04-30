@@ -1,10 +1,14 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/image_crop_helper.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 import '../../domain/entities/guest.dart';
 import '../bloc/guest_list_bloc.dart';
@@ -16,8 +20,10 @@ class FrroListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Load guest list when page opens
-    context.read<GuestListBloc>().add(const LoadGuestList(branchId: 5));
+    // Load guest list when page opens — show Check-in pending guests (btnStatusOfCheckINOUT: 1)
+    context.read<GuestListBloc>().add(
+      const LoadGuestList(branchId: 5, btnStatusOfCheckINOUT: 1),
+    );
     return const _FrroListPageContent();
   }
 }
@@ -31,10 +37,14 @@ class _FrroListPageContent extends StatefulWidget {
 
 class _FrroListPageState extends State<_FrroListPageContent> {
   static const _frroUrl = 'https://indianfrro.gov.in/frro/FormC';
-  static const _username = 'zerosnap123';
-  static const _password = 'Zerosnap@0650';
 
-  static const _credentialsScript =
+  // Loaded from preferences on initState — no hardcoded credentials
+  String _frroUsername = '';
+  String _frroPassword = '';
+  String _frroDistrictId = '';
+
+  /// Builds the credential auto-fill script using values loaded from prefs.
+  String get _credentialsScript =>
       """
     (function() {
       var userSel = ['#username','#txtUsername','#loginId','#userId',
@@ -56,8 +66,8 @@ class _FrroListPageState extends State<_FrroListPageContent> {
         }
         return false;
       }
-      fill(userSel, '$_username');
-      fill(passSel, '$_password');
+      fill(userSel, '${_frroUsername.replaceAll("'", "\\'")}');
+      fill(passSel, '${_frroPassword.replaceAll("'", "\\'")}');
     })();
   """;
 
@@ -65,7 +75,7 @@ class _FrroListPageState extends State<_FrroListPageContent> {
   bool _loading = true;
   Guest? _selectedGuest;
 
-  static String _formFillScript(Guest g) {
+  static String _formFillScript(Guest g, {String frroDistrictId = ''}) {
     String e(String? v) {
       if (v == null || v.isEmpty) return '';
       return v
@@ -398,9 +408,10 @@ class _FrroListPageState extends State<_FrroListPageContent> {
             }
           }
           // After state change, district dropdown loads — select district after delay
-          ${g.branch.district.isNotEmpty ? """
+          // Priority: FrroDistrictId from preferences, fallback to Branch district
+          ${(frroDistrictId.isNotEmpty || g.branch.district.isNotEmpty) ? """
           setTimeout(function() {
-            selectFirst(['#applicant_refstatedistr','[name="applicant_refstatedistr"]'], '${e(g.branch.district)}');
+            selectFirst(['#applicant_refstatedistr','[name="applicant_refstatedistr"]'], '${frroDistrictId.isNotEmpty ? e(frroDistrictId) : e(g.branch.district)}');
           }, 600);
           """ : ''}
         }
@@ -444,11 +455,16 @@ class _FrroListPageState extends State<_FrroListPageContent> {
             setState(() => _loading = false);
             final lower = url.toLowerCase();
 
-            // Submission detection — track submission but don't call API
-            // API should only be called when user clicks Check-in button
+            // Submission detection — call API to update status and reload list
             if (_isSubmissionUrl(lower)) {
               if (_selectedGuest != null) {
                 await _trackSubmission(_selectedGuest!);
+              }
+              // Reload guest list immediately so submitted guest is removed
+              if (mounted) {
+                context.read<GuestListBloc>().add(
+                  const LoadGuestList(branchId: 5, btnStatusOfCheckINOUT: 1),
+                );
               }
               return; // Do not run credential/form-fill scripts on submission pages
             }
@@ -463,7 +479,12 @@ class _FrroListPageState extends State<_FrroListPageContent> {
                 lower.contains('addcform')) {
               // Form page — fill guest data if one is selected
               if (_selectedGuest != null) {
-                await _webCtrl.runJavaScript(_formFillScript(_selectedGuest!));
+                await _webCtrl.runJavaScript(
+                  _formFillScript(
+                    _selectedGuest!,
+                    frroDistrictId: _frroDistrictId,
+                  ),
+                );
               }
             } else {
               // Any other page — try credentials in case it's a login redirect
@@ -471,8 +492,99 @@ class _FrroListPageState extends State<_FrroListPageContent> {
             }
           },
         ),
-      )
-      ..loadRequest(Uri.parse(_frroUrl));
+      );
+
+    // Enable file uploads (camera + gallery) for Android WebView
+    final platform = _webCtrl.platform;
+    if (platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(false);
+      platform.setOnShowFileSelector(_handleFileSelector);
+    }
+
+    _webCtrl.loadRequest(Uri.parse(_frroUrl));
+
+    // Load FRRO credentials from preferences
+    _loadFrroCredentials();
+  }
+
+  /// Handles <input type="file"> taps inside the WebView.
+  /// Opens the image picker, then the cropper, and returns the
+  /// cropped file URI to the WebView.
+  Future<List<String>> _handleFileSelector(FileSelectorParams params) async {
+    final picker = ImagePicker();
+    final acceptsImage = params.acceptTypes.any(
+      (t) => t.contains('image') || t == '*/*' || t.isEmpty,
+    );
+
+    if (!acceptsImage) return [];
+
+    // Show a bottom sheet to let the user choose camera or gallery
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Upload Photo',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return [];
+
+    final picked = await picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null) return [];
+
+    // Launch cropper so the user can adjust the photo before uploading
+    if (!mounted) return [];
+    final croppedPath = await cropImage(context, picked.path);
+
+    // If user cancelled the crop, abort the upload
+    if (croppedPath == null) return [];
+
+    // Compress the cropped image to below 50 KB
+    final compressedPath = await compressImageBelow50KB(croppedPath);
+
+    return ['file://$compressedPath'];
+  }
+
+  Future<void> _loadFrroCredentials() async {
+    final prefs = SharedPreferencesProvider();
+    final username = await prefs.getFrroUsername();
+    final password = await prefs.getFrroPassword();
+    final districtId = await prefs.getFrroDistrictId();
+    if (mounted) {
+      setState(() {
+        _frroUsername = username;
+        _frroPassword = password;
+        _frroDistrictId = districtId;
+      });
+    }
   }
 
   /// Returns true if [lowerUrl] is one of the two known FRRO submission
@@ -482,27 +594,26 @@ class _FrroListPageState extends State<_FrroListPageContent> {
     return lowerUrl.contains('svnext.jsp') || lowerUrl.contains('/ext.jsp');
   }
 
-  /// Called when a submission URL is detected. Dispatches FrroSubmitted event
-  /// to update guest list state without showing any notification.
+  /// Called when a submission URL is detected. Calls the
+  /// UpdateFRROBeforeCheckInStatusMobile API via the BLoC, then reloads
+  /// the guest list so submitted guests are removed from the sheet.
   Future<void> _trackSubmission(Guest guest) async {
-    // Dispatch FrroSubmitted event to update guest list state
     if (mounted) {
       context.read<GuestListBloc>().add(
-        FrroSubmitted(
-          guestdataId: guest.guestdataId,
-          applicationId: '', // No application ID tracking
-        ),
+        FrroSubmitted(guestdataId: guest.guestdataId),
       );
     }
   }
 
   void _showGuestSheet(List<Guest> guests) {
+    // Only show guests that have not yet been submitted to FRRO (passToFRRO == 0)
+    final pendingGuests = guests.where((g) => g.isNewGuest).toList();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _GuestBottomSheet(
-        guests: guests,
+        guests: pendingGuests,
         selectedGuest: _selectedGuest,
         onGuestSelected: (guest) {
           setState(() => _selectedGuest = guest);
@@ -513,7 +624,9 @@ class _FrroListPageState extends State<_FrroListPageContent> {
               if (lower.contains('formc.jsp') ||
                   lower.contains('newcform') ||
                   lower.contains('addcform')) {
-                _webCtrl.runJavaScript(_formFillScript(guest));
+                _webCtrl.runJavaScript(
+                  _formFillScript(guest, frroDistrictId: _frroDistrictId),
+                );
               }
             }
           });
@@ -538,7 +651,9 @@ class _FrroListPageState extends State<_FrroListPageContent> {
               margin: const EdgeInsets.all(12),
             ),
           );
-          context.read<GuestListBloc>().add(const LoadGuestList(branchId: 5));
+          context.read<GuestListBloc>().add(
+            const LoadGuestList(branchId: 5, btnStatusOfCheckINOUT: 1),
+          );
         } else if (state is GuestCheckInFailure) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
