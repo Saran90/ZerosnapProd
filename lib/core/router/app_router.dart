@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/guest_management/presentation/pages/guest_list_page.dart';
 import '../../features/guest_management/presentation/pages/guest_detail_page.dart';
@@ -11,6 +12,7 @@ class AppRoutes {
   AppRoutes._();
 
   static const String splash = '/';
+  static const String login = '/login';
   static const String dashboard = '/dashboard';
   static const String guestList = '/guests';
   static const String addGuest = '/guests/add';
@@ -25,6 +27,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.splash,
       builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.login,
+      builder: (context, state) => const LoginPage(),
     ),
     GoRoute(
       path: AppRoutes.dashboard,

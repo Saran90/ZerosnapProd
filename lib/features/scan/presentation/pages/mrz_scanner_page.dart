@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import 'package:mrzscanner_flutter/mrzscanner_constants.dart';
 import '../../domain/entities/mrz_result.dart';
-import '../widgets/mrz_result_sheet.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import 'passport_form_page.dart';
 
@@ -33,7 +32,6 @@ class MrzScannerPage extends StatefulWidget {
 
 class _MrzScannerPageState extends State<MrzScannerPage> {
   bool _isScanning = false;
-  String _rawResult = '';
 
   @override
   void initState() {
@@ -85,7 +83,6 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
   Future<void> _startScanner() async {
     setState(() {
       _isScanning = true;
-      _rawResult = '';
     });
 
     try {
@@ -101,23 +98,17 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
 
       if (!mounted) return;
 
-      setState(() {
-        _rawResult = raw.isEmpty ? '(empty result)' : raw;
-        _isScanning = false;
-      });
+      setState(() => _isScanning = false);
 
       if (raw.isNotEmpty && raw != 'null' && !raw.startsWith('Error:')) {
         final result = _parseMrzString(raw);
-        _showResultSheet(result);
+        _navigateWithResult(result);
       }
     } on PlatformException catch (ex) {
       debugPrint('MRZ PlatformException: ${ex.message}');
       if (mounted) {
         final msg = _friendlyError(ex.message ?? ex.toString());
-        setState(() {
-          _rawResult = 'Error: $msg';
-          _isScanning = false;
-        });
+        setState(() => _isScanning = false);
         if (widget.fromGallery) {
           _showErrorToast(msg);
         }
@@ -126,10 +117,8 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
       debugPrint('MRZ error: $e\n$st');
       if (mounted) {
         final msg = _friendlyError(e.toString());
-        setState(() {
-          _rawResult = 'Error: $msg';
-          _isScanning = false;
-        });
+        setState(() => _isScanning = false);
+        _showErrorToast(msg);
       }
     }
   }
@@ -209,33 +198,19 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
     );
   }
 
-  void _showResultSheet(MrzResult result) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => MrzResultSheet(
-        result: result,
-        onConfirm: () {
-          Navigator.of(context).pop(); // close sheet
-          if (widget.visaMode) {
-            // In visa mode — pop the scanner and return the result to caller
-            Navigator.of(context).pop(result);
-          } else {
-            // Navigate to passport form with pre-filled data
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => PassportFormPage(scannedResult: result),
-              ),
-            );
-          }
-        },
-        onRescan: () {
-          Navigator.of(context).pop();
-          _startScanner();
-        },
-      ),
-    );
+  void _navigateWithResult(MrzResult result) {
+    if (!mounted) return;
+    if (widget.visaMode) {
+      // Visa mode — return result directly to caller (PassportFormPage)
+      Navigator.of(context).pop(result);
+    } else {
+      // Passport mode — go straight to PassportFormPage, no intermediate sheet
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PassportFormPage(scannedResult: result),
+        ),
+      );
+    }
   }
 
   @override
@@ -260,53 +235,6 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
                         ? 'Opening gallery...'
                         : 'Starting scanner...',
                     style: const TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-            )
-          : _rawResult.isNotEmpty
-          ? SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Raw Scanner Result:',
-                    style: TextStyle(
-                      color: Color(0xFF29ABE2),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: SelectableText(
-                      _rawResult,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _startScanner,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF29ABE2),
-                      ),
-                      child: Text(
-                        widget.fromGallery ? 'Upload Again' : 'Scan Again',
-                      ),
-                    ),
                   ),
                 ],
               ),

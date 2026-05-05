@@ -1,6 +1,7 @@
 import '../../../../core/config/api_constants.dart';
 import '../../../../core/network/api_base_helper.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
+import '../../domain/entities/lookup_models.dart';
 
 class PassportRepository {
   final ApiBaseHelper _api;
@@ -10,17 +11,20 @@ class PassportRepository {
     : _api = api ?? ApiBaseHelper(),
       _prefs = prefs ?? SharedPreferencesProvider();
 
-  /// POST to /api/SavePassportAndVisa — mirrors Android savePassport()
+  Future<Map<String, String>> get _authHeaders async {
+    final token = await _prefs.getAccessToken();
+    return {'Authorization': 'Bearer $token'};
+  }
+
+  /// POST to /api/SavePassportAndVisa
   Future<bool> savePassport(Map<String, dynamic> body) async {
     final url = await _prefs.getBaseUrl();
-    final token = await _prefs.getAccessToken();
-
     final response =
         await _api.post(
               ApiConstants.savePassport,
               baseUrl: url,
               body: body,
-              headers: {'Authorization': 'Bearer $token'},
+              headers: await _authHeaders,
             )
             as Map<String, dynamic>;
 
@@ -29,29 +33,67 @@ class PassportRepository {
     return status == 1;
   }
 
-  /// OCR extract from passport image — returns extracted field map or null.
-  Future<Map<String, dynamic>?> extractPassport({
-    required String frontBase64,
-    String? backBase64,
-  }) async {
+  /// GET /api/GetNationalityList
+  Future<List<MrzCountry>> getCountries() async {
     final url = await _prefs.getBaseUrl();
-    final token = await _prefs.getAccessToken();
-    final apiKey = await _prefs.getApiKey();
+    final response = await _api.get(
+      ApiConstants.countries,
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => MrzCountry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 
-    final response =
-        await _api.post(
-              ApiConstants.savePassport,
-              baseUrl: url,
-              body: {
-                'idfrontbase64': frontBase64,
-                if (backBase64 != null && backBase64.isNotEmpty)
-                  'idbackbase64': backBase64,
-              },
-              headers: {'Authorization': 'Bearer $token', 'IntelliKey': apiKey},
-            )
-            as Map<String, dynamic>;
+  /// GET /api/GetPurposeOfVisitList
+  Future<List<Purpose>> getPurposes() async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      ApiConstants.purposes,
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => Purpose.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 
-    final data = response['Data'] ?? response['data'];
-    return data as Map<String, dynamic>?;
+  /// GET /api/GetVisaTypeList
+  Future<List<VisaType>> getVisaTypes() async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      ApiConstants.visaTypes,
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => VisaType.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// GET /api/GetVehicleTypeList
+  Future<List<VehicleType>> getVehicleTypes() async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      ApiConstants.vehicleTypes,
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => VehicleType.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }

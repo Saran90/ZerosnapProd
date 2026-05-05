@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
+import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/mrz_result.dart';
 import '../widgets/signature_pad.dart';
@@ -146,52 +147,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     required String title,
     required void Function(ImageSource) onPicked,
   }) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.camera_alt_outlined,
-                color: AppColors.primary,
-              ),
-              title: const Text('Open Camera'),
-              onTap: () {
-                Navigator.pop(context);
-                onPicked(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.photo_library_outlined,
-                color: AppColors.primary,
-              ),
-              title: const Text('Upload from Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                onPicked(ImageSource.gallery);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+    showImageSourceDialog(context, title: title, onPicked: onPicked);
   }
 
   Future<String?> _captureImage(ImageSource source) async {

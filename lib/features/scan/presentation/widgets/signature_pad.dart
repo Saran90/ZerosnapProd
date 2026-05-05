@@ -51,9 +51,78 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
           _repaintKey.currentContext!.findRenderObject()!
               as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+      final byteData = await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+      if (byteData == null || !mounted) return;
+
+      final pixels = byteData.buffer.asUint8List();
+      final w = image.width;
+      final h = image.height;
+
+      int minX = w, minY = h, maxX = 0, maxY = 0;
+      bool foundInk = false;
+
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          final idx = (y * w + x) * 4;
+          final r = pixels[idx];
+          final g = pixels[idx + 1];
+          final b = pixels[idx + 2];
+          final a = pixels[idx + 3];
+          // Ink = fully opaque AND not white
+          if (a > 200 && (r < 200 || g < 200 || b < 200)) {
+            foundInk = true;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      Uint8List result;
+
+      if (foundInk && maxX > minX && maxY > minY) {
+        const pad = 24;
+        final left = (minX - pad).clamp(0, w);
+        final top = (minY - pad).clamp(0, h);
+        final right = (maxX + pad).clamp(0, w);
+        final bottom = (maxY + pad).clamp(0, h);
+        final cropW = right - left;
+        final cropH = bottom - top;
+
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        // White background
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, cropW.toDouble(), cropH.toDouble()),
+          Paint()..color = Colors.white,
+        );
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(
+            left.toDouble(),
+            top.toDouble(),
+            cropW.toDouble(),
+            cropH.toDouble(),
+          ),
+          Rect.fromLTWH(0, 0, cropW.toDouble(), cropH.toDouble()),
+          Paint(),
+        );
+        final cropped = await recorder.endRecording().toImage(cropW, cropH);
+        final croppedData = await cropped.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        result = croppedData!.buffer.asUint8List();
+      } else {
+        final fallback = await image.toByteData(format: ui.ImageByteFormat.png);
+        result = fallback!.buffer.asUint8List();
+      }
+
       if (!mounted) return;
-      Navigator.of(context).pop(byteData?.buffer.asUint8List());
+      Navigator.of(context).pop(result);
     } catch (e) {
       debugPrint('Signature capture error: $e');
     }
@@ -96,30 +165,27 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: RepaintBoundary(
-                      key: _repaintKey,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(
-                            color: AppColors.primary,
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 1.5,
                         ),
-                        child: GestureDetector(
-                          onPanStart: _onPanStart,
-                          onPanUpdate: _onPanUpdate,
-                          onPanEnd: _onPanEnd,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(11),
-                            child: CustomPaint(
-                              painter: _SignaturePainter(
-                                strokes: _strokes,
-                                current: _current,
-                              ),
-                              child: const SizedBox.expand(),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: GestureDetector(
+                        onPanStart: _onPanStart,
+                        onPanUpdate: _onPanUpdate,
+                        onPanEnd: _onPanEnd,
+                        child: RepaintBoundary(
+                          key: _repaintKey,
+                          child: CustomPaint(
+                            painter: _SignaturePainter(
+                              strokes: _strokes,
+                              current: _current,
                             ),
+                            child: const SizedBox.expand(),
                           ),
                         ),
                       ),
@@ -193,6 +259,12 @@ class _SignaturePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // White background so pixel scan works correctly
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = Colors.white,
+    );
+
     final paint = Paint()
       ..color = Colors.black
       ..strokeWidth = 2.5

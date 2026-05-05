@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 
 class SplashPage extends StatefulWidget {
@@ -27,8 +28,18 @@ class _SplashPageState extends State<SplashPage>
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) context.go(AppRoutes.dashboard);
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      // If no domain saved yet, go to login; otherwise go to dashboard
+      final prefs = SharedPreferencesProvider();
+      final baseUrl = await prefs.getBaseUrl();
+      final token = await prefs.getAccessToken();
+      if (!mounted) return;
+      if (baseUrl.isEmpty || token.isEmpty) {
+        context.go(AppRoutes.login);
+      } else {
+        context.go(AppRoutes.dashboard);
+      }
     });
   }
 

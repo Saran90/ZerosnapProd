@@ -3,44 +3,48 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/scan_card_dialog.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
-  // Set to true once assets/images/dashboard_character.png is added
-  static const bool _useCharacterAsset = true;
-
   @override
   Widget build(BuildContext context) {
+    final screenH = MediaQuery.of(context).size.height;
+    final topPad = MediaQuery.of(context).padding.top;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
+    // Hero takes 52% of screen — leaves enough room for content on all sizes
+    final heroH = screenH * 0.52;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // ── Top hero image expands to fill remaining space ──────────
-          Expanded(
+          // ── Hero image ──────────────────────────────────────────────
+          SizedBox(
+            height: heroH,
+            width: double.infinity,
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Character / hero image
                 ClipPath(
                   clipper: _BottomCurveClipper(),
-                  child: _useCharacterAsset
-                      ? Image.asset(
-                          'assets/images/dashboard_image.png',
-                          fit: BoxFit.cover,
-                          alignment: Alignment.topCenter,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const _PlaceholderHero(),
-                        )
-                      : const _PlaceholderHero(),
+                  child: Image.asset(
+                    'assets/images/dashboard_image.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    errorBuilder: (_, __, ___) => const _PlaceholderHero(),
+                  ),
                 ),
-
-                // Settings icon top-right
+                // Settings icon
                 Positioned(
-                  top: MediaQuery.of(context).padding.top + 12,
+                  top: topPad + 12,
                   right: 16,
                   child: GestureDetector(
-                    onTap: () {},
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    ),
                     child: Container(
                       width: 42,
                       height: 42,
@@ -67,44 +71,42 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
 
-          // ── Bottom content — takes only its natural height ──────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 40),
+          // ── Bottom content fills remaining space ────────────────────
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo
+                  Image.asset(
+                    'assets/icons/logo_zerosnap.png',
+                    height: 52,
+                    fit: BoxFit.contain,
+                  ),
 
-                // ZeroSnap logo
-                Image.asset(
-                  'assets/icons/logo_zerosnap.png',
-                  height: 60,
-                  fit: BoxFit.contain,
-                ),
+                  const SizedBox(height: 32),
 
-                const SizedBox(height: 36),
+                  _DashboardButton(
+                    label: 'Guest List',
+                    onTap: () => context.go(AppRoutes.guestList),
+                  ),
 
-                // Guest List button
-                _DashboardButton(
-                  label: 'Guest List',
-                  onTap: () => context.go(AppRoutes.guestList),
-                ),
+                  const SizedBox(height: 14),
 
-                const SizedBox(height: 12),
-
-                // Scan Card button
-                _DashboardButton(
-                  label: 'Scan Card',
-                  onTap: () => showScanCardDialog(context),
-                ),
-              ],
+                  _DashboardButton(
+                    label: 'Scan Card',
+                    onTap: () => showScanCardDialog(context),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          // Version pinned to bottom
-          const Padding(
-            padding: EdgeInsets.only(bottom: 30, top: 24),
-            child: Text(
+          // Version
+          Padding(
+            padding: EdgeInsets.only(bottom: bottomPad + 16, top: 8),
+            child: const Text(
               'version 1.0',
               style: TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
             ),
@@ -115,21 +117,20 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// ── Clips the hero image with a curved bottom ─────────────────────────────────
+// ── Curved bottom clipper ─────────────────────────────────────────────────────
 class _BottomCurveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     final path = Path();
     path.lineTo(0, size.height);
     path.lineTo(size.width * 0.50, size.height);
-    // Convex (outward) curve — control points pushed beyond the right edge
     path.cubicTo(
       size.width * 1.10,
-      size.height, // cp1: far right, stays at bottom
+      size.height,
       size.width * 1.10,
-      size.height * 0.55, // cp2: far right, pulls up
+      size.height * 0.55,
       size.width,
-      size.height * 0.55, // end: right edge at ~55% height
+      size.height * 0.55,
     );
     path.lineTo(size.width, 0);
     path.close();
@@ -140,7 +141,7 @@ class _BottomCurveClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-// ── Placeholder when character image is not yet added ────────────────────────
+// ── Placeholder hero ──────────────────────────────────────────────────────────
 class _PlaceholderHero extends StatelessWidget {
   const _PlaceholderHero();
 
@@ -161,7 +162,7 @@ class _PlaceholderHero extends StatelessWidget {
   }
 }
 
-// ── Dashboard pill button matching Figma style ────────────────────────────────
+// ── Pill button ───────────────────────────────────────────────────────────────
 class _DashboardButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;

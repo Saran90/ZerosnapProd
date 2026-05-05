@@ -101,8 +101,6 @@ class _ChooseCardDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final options = DomesticCardType.values;
-
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -127,50 +125,67 @@ class _ChooseCardDialog extends StatelessWidget {
             ),
           ),
 
-          // ── Domestic card options ────────────────────────────────
-          ...List.generate(options.length, (i) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InkWell(
-                  onTap: () {
-                    final nav = Navigator.of(context);
-                    nav.pop();
-                    nav.push(
-                      MaterialPageRoute(
-                        builder: (_) => CardScanPage(cardType: options[i]),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 18,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        options[i].label,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2C3E50),
-                        ),
-                      ),
-                    ),
-                  ),
+          // ── Domestic card options + Passport interleaved ─────────────
+          ..._buildItem(
+            context,
+            label: 'Driving License',
+            onTap: () {
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CardScanPage(cardType: DomesticCardType.drivingLicense),
                 ),
-                const Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Color(0xFFE0E0E0),
+              );
+            },
+          ),
+          ..._buildItem(
+            context,
+            label: 'Aadhar',
+            onTap: () {
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CardScanPage(cardType: DomesticCardType.aadhar),
                 ),
-              ],
-            );
-          }),
-
-          // ── Passport option ──────────────────────────────────────
-          InkWell(
+              );
+            },
+          ),
+          ..._buildItem(
+            context,
+            label: 'Voters ID',
+            onTap: () {
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CardScanPage(cardType: DomesticCardType.votersId),
+                ),
+              );
+            },
+          ),
+          ..._buildItem(
+            context,
+            label: 'PAN Card',
+            onTap: () {
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CardScanPage(cardType: DomesticCardType.panCard),
+                ),
+              );
+            },
+          ),
+          // ── Passport between PAN Card and Other ID ───────────────
+          ..._buildItem(
+            context,
+            label: 'Passport',
             onTap: () {
               final nav = Navigator.of(context);
               nav.pop();
@@ -180,26 +195,53 @@ class _ChooseCardDialog extends StatelessWidget {
                 ),
               );
             },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Passport',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2C3E50),
-                  ),
+          ),
+          ..._buildItem(
+            context,
+            label: 'Other ID',
+            onTap: () {
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CardScanPage(cardType: DomesticCardType.otherId),
                 ),
-              ),
-            ),
+              );
+            },
           ),
 
           const SizedBox(height: 8),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildItem(
+    BuildContext context, {
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return [
+      InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2C3E50),
+              ),
+            ),
+          ),
+        ),
+      ),
+      const Divider(height: 1, thickness: 1, color: Color(0xFFE0E0E0)),
+    ];
   }
 }
 
