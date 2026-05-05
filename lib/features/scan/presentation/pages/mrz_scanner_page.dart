@@ -26,13 +26,32 @@ class MrzScannerPage extends StatefulWidget {
     this.visaMode = false,
   });
 
+  /// Public static parser so callers (e.g. choose_card_dialog) can reuse
+  /// the same MRZ string → MrzResult logic without pushing this page.
+  static MrzResult parseMrz(String raw) =>
+      _MrzScannerPageState._parseMrzStatic(raw);
+
+  /// Configures the MRZ plugin for passport-only scanning.
+  /// Must be called before [Mrzflutterplugin.scanFromGallery] or
+  /// [Mrzflutterplugin.startScanner] when not going through this page.
+  static void setupForPassport() {
+    Mrzflutterplugin.setPassportActive(true);
+    Mrzflutterplugin.setIDActive(false);
+    Mrzflutterplugin.setVisaActive(false);
+    Mrzflutterplugin.setScannerType(ScannerType.MRZ);
+    Mrzflutterplugin.setDateFormat('dd-MM-yyyy');
+    Mrzflutterplugin.setVibrateOnSuccessfulScan(true);
+    Mrzflutterplugin.setEffortLevel(EffortLevel.SWEATY);
+    Mrzflutterplugin.setMaxThreads(
+      4,
+    ); // more threads = better gallery scan accuracy
+  }
+
   @override
   State<MrzScannerPage> createState() => _MrzScannerPageState();
 }
 
 class _MrzScannerPageState extends State<MrzScannerPage> {
-  bool _isScanning = false;
-
   @override
   void initState() {
     super.initState();
@@ -54,39 +73,39 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
     }
   }
 
-  void _setupScanner() {
+  Future<void> _setupScanner() async {
     final isPassport = widget.domesticCardType == null && !widget.visaMode;
 
     if (widget.visaMode) {
-      // Visa-only mode
       Mrzflutterplugin.setPassportActive(false);
       Mrzflutterplugin.setIDActive(false);
       Mrzflutterplugin.setVisaActive(true);
     } else if (isPassport) {
-      // Passport-only mode — matches Android scanPassport()
       Mrzflutterplugin.setPassportActive(true);
       Mrzflutterplugin.setIDActive(false);
       Mrzflutterplugin.setVisaActive(false);
     } else {
-      // Domestic card / visa mode — matches Android _gotoVisaPage()
       Mrzflutterplugin.setPassportActive(true);
       Mrzflutterplugin.setIDActive(true);
       Mrzflutterplugin.setVisaActive(true);
     }
 
     Mrzflutterplugin.setScannerType(_resolveScannerType());
-    Mrzflutterplugin.setDateFormat('dd-MM-yyyy'); // matches Android date format
+    Mrzflutterplugin.setDateFormat('dd-MM-yyyy');
     Mrzflutterplugin.setVibrateOnSuccessfulScan(true);
     Mrzflutterplugin.setEffortLevel(EffortLevel.SWEATY);
+    if (widget.fromGallery) {
+      Mrzflutterplugin.setMaxThreads(4);
+    }
+
+    // Longer delay for gallery — more config messages to process.
+    final delay = widget.fromGallery ? 800 : 300;
+    await Future<void>.delayed(Duration(milliseconds: delay));
   }
 
   Future<void> _startScanner() async {
-    setState(() {
-      _isScanning = true;
-    });
-
     try {
-      _setupScanner();
+      await _setupScanner();
 
       final String raw = widget.fromGallery
           ? await Mrzflutterplugin.scanFromGallery
@@ -98,34 +117,41 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
 
       if (!mounted) return;
 
-      setState(() => _isScanning = false);
-
-      if (raw.isNotEmpty && raw != 'null' && !raw.startsWith('Error:')) {
-        final result = _parseMrzString(raw);
-        _navigateWithResult(result);
+      // Empty / null / dismissed result means the user pressed back — pop back
+      if (raw.isEmpty || raw == 'null' || raw.startsWith('Error:')) {
+        Navigator.of(context).pop();
+        return;
       }
+
+      final result = _parseMrzString(raw);
+      _navigateWithResult(result);
     } on PlatformException catch (ex) {
       debugPrint('MRZ PlatformException: ${ex.message}');
       if (mounted) {
+        // scannerWasDismissed = user pressed back — just pop silently
+        if (ex.message?.contains('scannerWasDismissed') == true) {
+          Navigator.of(context).pop();
+          return;
+        }
         final msg = _friendlyError(ex.message ?? ex.toString());
-        setState(() => _isScanning = false);
         if (widget.fromGallery) {
           _showErrorToast(msg);
         }
+        Navigator.of(context).pop();
       }
     } catch (e, st) {
       debugPrint('MRZ error: $e\n$st');
       if (mounted) {
         final msg = _friendlyError(e.toString());
-        setState(() => _isScanning = false);
         _showErrorToast(msg);
+        Navigator.of(context).pop();
       }
     }
   }
 
   /// Primary parser: JSON decode (matches Android project's jsonDecode approach).
   /// Falls back to key=value line parsing for older SDK versions.
-  MrzResult _parseMrzString(String raw) {
+  static MrzResult _parseMrzStatic(String raw) {
     // Attempt JSON decode first — this is what the Android project does
     try {
       final Map<String, dynamic> jsonResult =
@@ -169,6 +195,8 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
       rawMrz: raw,
     );
   }
+
+  MrzResult _parseMrzString(String raw) => _parseMrzStatic(raw);
 
   String _friendlyError(String raw) {
     if (raw.contains('scanImageFailed')) {
@@ -215,31 +243,29 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Shown briefly while the native scanner/gallery is launching or
+    // while the MRZ plugin is processing a selected image.
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        title: Text(widget.title),
-        elevation: 0,
-      ),
-      body: _isScanning
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: Color(0xFF29ABE2)),
-                  const SizedBox(height: 16),
-                  Text(
-                    widget.fromGallery
-                        ? 'Opening gallery...'
-                        : 'Starting scanner...',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFF29ABE2)),
+            const SizedBox(height: 16),
+            Text(
+              widget.fromGallery
+                  ? 'Processing image...'
+                  : 'Starting scanner...',
+              style: const TextStyle(
+                fontSize: 15,
+                color: Color(0xFF2C3E50),
+                fontWeight: FontWeight.w500,
               ),
-            )
-          : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

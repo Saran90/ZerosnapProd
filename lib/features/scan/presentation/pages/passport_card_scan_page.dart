@@ -17,7 +17,11 @@ import 'mrz_scanner_page.dart';
 /// Mirrors the Android project's National card → Passport path:
 ///   capture front/back images → OCR extract → fill form → add visa → sign → submit
 class PassportCardScanPage extends StatefulWidget {
-  const PassportCardScanPage({super.key});
+  /// When provided, the page will pre-fill the front image and immediately
+  /// run OCR extraction — skipping the manual image capture step.
+  final String? initialFrontImagePath;
+
+  const PassportCardScanPage({super.key, this.initialFrontImagePath});
 
   @override
   State<PassportCardScanPage> createState() => _PassportCardScanPageState();
@@ -70,6 +74,17 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   bool _isSubmitting = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    // If an image was pre-selected (e.g. from gallery in the dialog),
+    // set it as the front image immediately so the user can proceed to submit.
+    if (widget.initialFrontImagePath != null) {
+      _frontImagePath = widget.initialFrontImagePath!;
+      _profileImagePath = widget.initialFrontImagePath!;
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [

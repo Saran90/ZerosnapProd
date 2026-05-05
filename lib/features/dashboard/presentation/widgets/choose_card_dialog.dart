@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../scan/presentation/pages/card_scan_page.dart';
 import '../../../scan/presentation/pages/mrz_scanner_page.dart';
+import '../../../scan/presentation/pages/passport_card_scan_page.dart';
+import '../../../scan/presentation/pages/passport_form_page.dart';
 
 enum DomesticCardType { drivingLicense, aadhar, votersId, panCard, otherId }
 
@@ -21,10 +27,112 @@ extension DomesticCardTypeLabel on DomesticCardType {
   }
 }
 
-/// Shows the passport source picker (Camera / Upload).
-/// Extracted here so both [showChooseCardDialog] and [scan_card_dialog] can use it.
+// ── MRZ scanner helper ────────────────────────────────────────────────────────
+
+/// Runs the MRZ passport camera scanner directly (no intermediate Flutter page).
+/// On success navigates to [PassportFormPage]. On cancel/error does nothing.
+Future<void> _runMrzPassportScanner(NavigatorState nav) async {
+  try {
+    MrzScannerPage.setupForPassport();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!nav.context.mounted) return;
+    final String raw = await Mrzflutterplugin.startScanner;
+    if (!nav.context.mounted) return;
+    if (raw.isEmpty || raw == 'null' || raw.startsWith('Error:')) return;
+    final result = MrzScannerPage.parseMrz(raw);
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => PassportFormPage(scannedResult: result),
+      ),
+    );
+  } on PlatformException catch (ex) {
+    if (!nav.context.mounted) return;
+    if (ex.message?.contains('scannerWasDismissed') == true) return;
+    ScaffoldMessenger.of(nav.context).showSnackBar(
+      SnackBar(
+        content: Text(ex.message ?? 'Scanner failed'),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+/// Runs the MRZ gallery scan directly (no intermediate Flutter page).
+/// On success navigates to [PassportFormPage]. On cancel/error does nothing.
+Future<void> _runMrzGalleryScan(NavigatorState nav) async {
+  try {
+    MrzScannerPage.setupForPassport();
+    // Longer delay for gallery scan — more config messages need to be
+    // processed by the native side before scanFromGallery is called.
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    if (!nav.context.mounted) return;
+    final String raw = await Mrzflutterplugin.scanFromGallery;
+    if (!nav.context.mounted) return;
+
+    // User cancelled
+    if (raw.isEmpty || raw == 'null') return;
+
+    // MRZ extraction failed — open form for manual entry
+    if (raw.startsWith('Error:')) {
+      if (raw.contains('scannerWasDismissed')) return;
+      ScaffoldMessenger.of(nav.context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not read MRZ from image. Please fill in details manually.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      nav.push(MaterialPageRoute(builder: (_) => const PassportFormPage()));
+      return;
+    }
+
+    final result = MrzScannerPage.parseMrz(raw);
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => PassportFormPage(scannedResult: result),
+      ),
+    );
+  } on PlatformException catch (ex) {
+    if (!nav.context.mounted) return;
+    if (ex.message?.contains('scannerWasDismissed') == true) return;
+    // scanImageFailed — open form for manual entry
+    if (ex.message?.contains('scanImageFailed') == true) {
+      ScaffoldMessenger.of(nav.context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not read MRZ from image. Please fill in details manually.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      nav.push(MaterialPageRoute(builder: (_) => const PassportFormPage()));
+      return;
+    }
+    ScaffoldMessenger.of(nav.context).showSnackBar(
+      SnackBar(
+        content: Text(ex.message ?? 'Gallery scan failed'),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+// ── Passport entry point ──────────────────────────────────────────────────────
+
+/// Entry point for passport scanning.
+/// Always shows Camera / Gallery chooser.
+/// - AppScanByMRZ=1 → Camera calls MRZ scanner, Gallery calls MRZ gallery scan
+/// - AppScanByMRZ=0 → Camera opens PassportCardScanPage, Gallery uses ImagePicker
 void showPassportSourceDialog(BuildContext context) {
-  final nav = Navigator.of(context);
+  // Always use the root navigator to ensure pushes work correctly even when
+  // called from inside a dialog (where the local navigator may be stale).
+  final nav = Navigator.of(context, rootNavigator: true);
+
   showDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.5),
@@ -44,31 +152,56 @@ void showPassportSourceDialog(BuildContext context) {
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 28),
+            // ── Camera ──────────────────────────────────────────────
             _PassportOptionButton(
               label: 'Open Camera',
-              onTap: () {
+              onTap: () async {
                 Navigator.of(dialogCtx).pop();
-                nav.push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const MrzScannerPage(title: 'Scan Passport'),
-                  ),
-                );
+                final session = await SharedPreferencesProvider()
+                    .getLoginSession();
+                final useMrz = session?.scanByMrz ?? true;
+                if (!nav.context.mounted) return;
+                if (useMrz) {
+                  // MRZ camera scan → PassportFormPage
+                  await _runMrzPassportScanner(nav);
+                } else {
+                  // OCR flow
+                  nav.push(
+                    MaterialPageRoute(
+                      builder: (_) => const PassportCardScanPage(),
+                    ),
+                  );
+                }
               },
             ),
             const SizedBox(height: 12),
+            // ── Gallery ─────────────────────────────────────────────
             _PassportOptionButton(
               label: 'Upload',
-              onTap: () {
+              onTap: () async {
                 Navigator.of(dialogCtx).pop();
-                nav.push(
-                  MaterialPageRoute(
-                    builder: (_) => const MrzScannerPage(
-                      title: 'Upload Passport',
-                      fromGallery: true,
+                final session = await SharedPreferencesProvider()
+                    .getLoginSession();
+                final useMrz = session?.scanByMrz ?? true;
+                if (!nav.context.mounted) return;
+                if (useMrz) {
+                  // MRZ gallery scan → PassportFormPage
+                  await _runMrzGalleryScan(nav);
+                } else {
+                  // OCR flow — pick image then open PassportCardScanPage
+                  final picked = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 100,
+                  );
+                  if (picked == null || !nav.context.mounted) return;
+                  nav.push(
+                    MaterialPageRoute(
+                      builder: (_) => PassportCardScanPage(
+                        initialFrontImagePath: picked.path,
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -83,6 +216,8 @@ void showPassportSourceDialog(BuildContext context) {
     ),
   );
 }
+
+// ── Choose card dialog ────────────────────────────────────────────────────────
 
 void showChooseCardDialog(
   BuildContext context, {
@@ -125,7 +260,6 @@ class _ChooseCardDialog extends StatelessWidget {
             ),
           ),
 
-          // ── Domestic card options + Passport interleaved ─────────────
           ..._buildItem(
             context,
             label: 'Driving License',
@@ -182,18 +316,15 @@ class _ChooseCardDialog extends StatelessWidget {
               );
             },
           ),
-          // ── Passport between PAN Card and Other ID ───────────────
+          // ── Passport ─────────────────────────────────────────────
           ..._buildItem(
             context,
             label: 'Passport',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
-                MaterialPageRoute(
-                  builder: (_) => const MrzScannerPage(title: 'Scan Passport'),
-                ),
-              );
+              // Capture context before popping — nav.context is stale after pop
+              final ctx = context;
+              Navigator.of(context).pop();
+              showPassportSourceDialog(ctx);
             },
           ),
           ..._buildItem(
@@ -244,6 +375,8 @@ class _ChooseCardDialog extends StatelessWidget {
     ];
   }
 }
+
+// ── Passport option button ────────────────────────────────────────────────────
 
 class _PassportOptionButton extends StatelessWidget {
   final String label;

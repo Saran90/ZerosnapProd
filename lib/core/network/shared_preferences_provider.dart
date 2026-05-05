@@ -27,6 +27,7 @@ class SharedPreferencesProvider {
   static const _keyShowGuestSignature = 'showGuestSignature';
   static const _keyShowPrintMobileApp = 'showPrintMobileApp';
   static const _keyShowFrroCheckOutInExt = 'showFrroCheckOutInExt';
+  static const _keyScanByMrz = 'scanByMrz';
 
   // ── Base URL ──────────────────────────────────────────────────────────────
   Future<void> saveBaseUrl(String url) async {
@@ -97,6 +98,7 @@ class SharedPreferencesProvider {
       prefs.setBool(_keyShowGuestSignature, session.showGuestSignature),
       prefs.setBool(_keyShowPrintMobileApp, session.showPrintMobileApp),
       prefs.setBool(_keyShowFrroCheckOutInExt, session.showFrroCheckOutInExt),
+      prefs.setBool(_keyScanByMrz, session.scanByMrz),
     ]);
   }
 
@@ -125,6 +127,7 @@ class SharedPreferencesProvider {
       showGuestSignature: prefs.getBool(_keyShowGuestSignature) ?? false,
       showPrintMobileApp: prefs.getBool(_keyShowPrintMobileApp) ?? false,
       showFrroCheckOutInExt: prefs.getBool(_keyShowFrroCheckOutInExt) ?? false,
+      scanByMrz: prefs.getBool(_keyScanByMrz) ?? true,
     );
   }
 
@@ -172,6 +175,7 @@ class LoginSession {
   final bool showGuestSignature;
   final bool showPrintMobileApp;
   final bool showFrroCheckOutInExt;
+  final bool scanByMrz; // true = MRZ scanner, false = OCR API
 
   const LoginSession({
     required this.token,
@@ -194,5 +198,6 @@ class LoginSession {
     this.showGuestSignature = false,
     this.showPrintMobileApp = false,
     this.showFrroCheckOutInExt = false,
+    this.scanByMrz = true, // default to MRZ scanner
   });
 }
