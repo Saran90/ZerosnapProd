@@ -7,6 +7,7 @@ import '../../../scan/presentation/pages/card_scan_page.dart';
 import '../../../scan/presentation/pages/mrz_scanner_page.dart';
 import '../../../scan/presentation/pages/passport_card_scan_page.dart';
 import '../../../scan/presentation/pages/passport_form_page.dart';
+import '../../../scan/presentation/widgets/duplicate_guest_checker.dart';
 
 enum DomesticCardType { drivingLicense, aadhar, votersId, panCard, otherId }
 
@@ -40,6 +41,13 @@ Future<void> _runMrzPassportScanner(NavigatorState nav) async {
     if (!nav.context.mounted) return;
     if (raw.isEmpty || raw == 'null' || raw.startsWith('Error:')) return;
     final result = MrzScannerPage.parseMrz(raw);
+    // Check for duplicate before navigating to the form
+    final isDuplicate = await checkAndHandleDuplicate(
+      nav.context,
+      documentNo: result.documentNumber ?? '',
+      cardType: GuestCardType.passport,
+    );
+    if (isDuplicate || !nav.context.mounted) return;
     nav.push(
       MaterialPageRoute(
         builder: (_) => PassportFormPage(scannedResult: result),
@@ -90,6 +98,13 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
     }
 
     final result = MrzScannerPage.parseMrz(raw);
+    // Check for duplicate before navigating to the form
+    final isDuplicate = await checkAndHandleDuplicate(
+      nav.context,
+      documentNo: result.documentNumber ?? '',
+      cardType: GuestCardType.passport,
+    );
+    if (isDuplicate || !nav.context.mounted) return;
     nav.push(
       MaterialPageRoute(
         builder: (_) => PassportFormPage(scannedResult: result),

@@ -41,4 +41,7 @@ class ApiConstants {
       '/api/UpdateFRROCheckInStatusMobile';
   static const String updateCheckOutStatus =
       '/api/UpdateFRROCheckOutStatusMobile';
+
+  // Duplicate guest check
+  static const String checkDuplicateGuest = '/api/CheckDupilcateGuest';
 }

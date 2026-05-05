@@ -10,6 +10,7 @@ import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
+import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
 import 'profile_crop_page.dart';
 
@@ -189,6 +190,14 @@ class _CardScanPageState extends State<CardScanPage> {
       if (result.isSuccess && result.data != null) {
         _fillFromOcr(result.data!);
         _snack('Extracted successfully', isError: false);
+        // Check for duplicate after OCR populates document number
+        if (mounted) {
+          await checkAndHandleDuplicate(
+            context,
+            documentNo: _docNoCtrl.text,
+            cardType: _guestCardType(),
+          );
+        }
       } else {
         _snack(
           result.message.isNotEmpty ? result.message : 'Extraction failed',
@@ -198,6 +207,22 @@ class _CardScanPageState extends State<CardScanPage> {
       _snack('Extraction failed: $e');
     } finally {
       if (mounted) setState(() => _isExtracting = false);
+    }
+  }
+
+  /// Maps [DomesticCardType] to the Guest_CardType value expected by the API.
+  String _guestCardType() {
+    switch (widget.cardType) {
+      case DomesticCardType.drivingLicense:
+        return GuestCardType.drivingLicence;
+      case DomesticCardType.aadhar:
+        return GuestCardType.aadhaar;
+      case DomesticCardType.panCard:
+        return GuestCardType.panCard;
+      case DomesticCardType.votersId:
+        return GuestCardType.votersId;
+      case DomesticCardType.otherId:
+        return GuestCardType.otherId;
     }
   }
 

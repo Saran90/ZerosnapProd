@@ -11,6 +11,7 @@ import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
 import '../../domain/entities/mrz_result.dart';
+import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
 import 'mrz_scanner_page.dart';
 
@@ -111,6 +112,18 @@ class _PassportFormPageState extends State<PassportFormPage> {
     _loadLookups();
     _checkoutDateCtrl.text = _fmt(_checkoutDate);
     _durationOfStayCtrl.addListener(_onDurationChanged);
+    // Check for duplicate after prefill (post-frame so context is ready)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkDuplicate());
+  }
+
+  Future<void> _checkDuplicate() async {
+    final docNo = _docNoCtrl.text.trim();
+    if (docNo.isEmpty || !mounted) return;
+    await checkAndHandleDuplicate(
+      context,
+      documentNo: docNo,
+      cardType: GuestCardType.passport,
+    );
   }
 
   void _onDurationChanged() {

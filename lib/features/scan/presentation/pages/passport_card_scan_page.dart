@@ -10,6 +10,7 @@ import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/mrz_result.dart';
+import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
 import 'mrz_scanner_page.dart';
 
@@ -253,6 +254,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _mrzPortraitBase64 = result.portrait;
       }
     });
+    // Check for duplicate after MRZ scan populates document number
+    if (!mounted) return;
+    await checkAndHandleDuplicate(
+      context,
+      documentNo: result.documentNumber ?? '',
+      cardType: GuestCardType.indianPassport,
+    );
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
