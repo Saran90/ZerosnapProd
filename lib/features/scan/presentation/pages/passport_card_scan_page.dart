@@ -27,10 +27,15 @@ class PassportCardScanPage extends StatefulWidget {
   /// as soon as the page loads (user already chose Camera in the dialog).
   final bool autoOpenCamera;
 
+  /// When false, hides the visa section (used for domestic card flow).
+  /// When true, shows the visa section (used for landing screen flow).
+  final bool showVisaSection;
+
   const PassportCardScanPage({
     super.key,
     this.initialFrontImagePath,
     this.autoOpenCamera = false,
+    this.showVisaSection = true,
   });
 
   @override
@@ -669,24 +674,29 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'User_Signature': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
             : '',
-        // Visa
-        'guest_VisaNo': _visaDocNoCtrl.text,
-        'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
-        'Guest_VisaPOICity': _visaPOICityCtrl.text,
-        'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
-        'guest_VisaValidTill': _visaExpiryDateCtrl.text,
-        'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
-        'VisaIDCardType': _visaTypeInt(),
       };
 
-      if (_isEVisaOrDiplomat) {
-        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
-      } else if (_isOCI) {
-        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
-        body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
-        body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
-      } else if (_visaType == 'MRZ Enable Visa') {
-        body['visaFile'] = _scannedVisa?.fullImage ?? '';
+      // Add visa fields only if visa section is shown
+      if (widget.showVisaSection) {
+        body.addAll({
+          'guest_VisaNo': _visaDocNoCtrl.text,
+          'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
+          'Guest_VisaPOICity': _visaPOICityCtrl.text,
+          'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
+          'guest_VisaValidTill': _visaExpiryDateCtrl.text,
+          'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
+          'VisaIDCardType': _visaTypeInt(),
+        });
+
+        if (_isEVisaOrDiplomat) {
+          body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+        } else if (_isOCI) {
+          body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+          body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
+          body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
+        } else if (_visaType == 'MRZ Enable Visa') {
+          body['visaFile'] = _scannedVisa?.fullImage ?? '';
+        }
       }
 
       final success = await _repo.savePassport(body);
@@ -727,8 +737,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             const SizedBox(height: 24),
             _buildTravelSection(),
             const SizedBox(height: 24),
-            _buildVisaSection(),
-            const SizedBox(height: 24),
+            if (widget.showVisaSection) ...[
+              _buildVisaSection(),
+              const SizedBox(height: 24),
+            ],
             _buildSignatureSection(),
           ],
         ),

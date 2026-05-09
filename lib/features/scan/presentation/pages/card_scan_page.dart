@@ -12,6 +12,7 @@ import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
+import 'passport_card_scan_page.dart';
 import 'profile_crop_page.dart';
 
 class CardScanPage extends StatefulWidget {
@@ -515,7 +516,13 @@ class _CardScanPageState extends State<CardScanPage> {
           '${widget.cardType.label} submitted successfully',
           isError: false,
         );
-        Navigator.of(context).pop(true);
+        // Navigate to passport page without visa section
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => PassportCardScanPage(showVisaSection: false),
+          ),
+        );
       } else {
         _snack('Submission failed. Please try again.');
       }

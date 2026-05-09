@@ -17,7 +17,16 @@ import 'mrz_scanner_page.dart';
 
 class PassportFormPage extends StatefulWidget {
   final MrzResult? scannedResult;
-  const PassportFormPage({super.key, this.scannedResult});
+
+  /// When false, hides the visa section (used for domestic card flow).
+  /// When true, shows the visa section (used for landing screen flow).
+  final bool showVisaSection;
+
+  const PassportFormPage({
+    super.key,
+    this.scannedResult,
+    this.showVisaSection = true,
+  });
 
   @override
   State<PassportFormPage> createState() => _PassportFormPageState();
@@ -526,13 +535,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'IntendedDurationStayIndividualHouse': _durationOfStayCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate.toIso8601String(),
         'GuestRoomNo': _roomNoCtrl.text,
-        'guest_VisaNo': _visaDocNoCtrl.text,
-        'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
-        'Guest_VisaPOICity': _visaPOICityCtrl.text,
-        'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
-        'guest_VisaValidTill': _visaExpiryDateCtrl.text,
-        'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
-        'VisaIDCardType': _visaTypeInt(),
         'passportFile': widget.scannedResult?.fullImage ?? '',
         'profileImageFile': _portraitBase64 ?? '',
         'GuestSignatureFile': _signatureBytes != null
@@ -540,14 +542,27 @@ class _PassportFormPageState extends State<PassportFormPage> {
             : '',
       };
 
-      if (_isEVisaOrDiplomat) {
-        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
-      } else if (_isOCI) {
-        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
-        body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
-        body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
-      } else if (_visaType == 'MRZ Enable Visa') {
-        body['visaFile'] = _scannedVisa?.fullImage ?? '';
+      // Add visa fields only if visa section is shown
+      if (widget.showVisaSection) {
+        body.addAll({
+          'guest_VisaNo': _visaDocNoCtrl.text,
+          'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
+          'Guest_VisaPOICity': _visaPOICityCtrl.text,
+          'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
+          'guest_VisaValidTill': _visaExpiryDateCtrl.text,
+          'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
+          'VisaIDCardType': _visaTypeInt(),
+        });
+
+        if (_isEVisaOrDiplomat) {
+          body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+        } else if (_isOCI) {
+          body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+          body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
+          body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
+        } else if (_visaType == 'MRZ Enable Visa') {
+          body['visaFile'] = _scannedVisa?.fullImage ?? '';
+        }
       }
 
       final success = await _repo.savePassport(body);
@@ -589,8 +604,10 @@ class _PassportFormPageState extends State<PassportFormPage> {
                   const SizedBox(height: 16),
                   _buildTravelCard(),
                   const SizedBox(height: 16),
-                  _buildVisaCard(),
-                  const SizedBox(height: 16),
+                  if (widget.showVisaSection) ...[
+                    _buildVisaCard(),
+                    const SizedBox(height: 16),
+                  ],
                   _buildOtherDetailsCard(),
                   const SizedBox(height: 16),
                   _buildSignatureCard(),
@@ -1562,7 +1579,9 @@ class _VisaImageSlot extends StatelessWidget {
     return GestureDetector(
       onTap: imagePath == null ? onTap : null,
       child: Container(
-        height: 110,
+        // Auto height when image shown so full image is visible
+        height: imagePath != null ? null : 110,
+        constraints: const BoxConstraints(minHeight: 110),
         decoration: BoxDecoration(
           color: imagePath != null
               ? Colors.transparent
@@ -1578,11 +1597,13 @@ class _VisaImageSlot extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.file(
-                      File(imagePath!),
-                      height: 110,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Image.file(
+                        File(imagePath!),
+                        width: double.infinity,
+                        fit: BoxFit.contain, // full image, no cropping
+                      ),
                     ),
                   ),
                   Positioned(

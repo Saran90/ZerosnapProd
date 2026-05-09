@@ -9,6 +9,7 @@ class ApiConstants {
   // Passport / Visa
   static const String savePassport = '/api/SavePassportAndVisa';
   static const String saveIndianPassport = '/api/SaveIndianPassport';
+  static const String extractPassport = '/api/Zerosnap/GetGVPassportFront';
 
   // Domestic cards
   static const String saveIndianCard = '/api/SaveIndianCard';

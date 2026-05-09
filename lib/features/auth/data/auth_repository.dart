@@ -89,7 +89,12 @@ class LoginResult {
         showGuestSignature: setting?['ShowGuestSignature'] == 1,
         showPrintMobileApp: setting?['ShowPrintMobileApp'] == 1,
         showFrroCheckOutInExt: setting?['ShowFRROCheckOutInExt'] == 1,
-        scanByMrz: (json['AppScanByMRZ'] as int? ?? 1) == 1,
+        scanByMrz:
+            (json['AppScanByMRZ'] as int? ??
+                json['appScanByMRZ'] as int? ??
+                json['AppScanByMrz'] as int? ??
+                0) ==
+            1,
       );
     }
 
