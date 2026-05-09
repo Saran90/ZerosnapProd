@@ -516,11 +516,11 @@ class _CardScanPageState extends State<CardScanPage> {
           '${widget.cardType.label} submitted successfully',
           isError: false,
         );
-        // Navigate to passport page with visa section
+        // Navigate to passport page without visa section
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => PassportCardScanPage(showVisaSection: true),
+            builder: (_) => PassportCardScanPage(showVisaSection: false),
           ),
         );
       } else {
