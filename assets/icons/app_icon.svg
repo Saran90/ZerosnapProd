@@ -1,0 +1,13 @@
+﻿<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Yellow top-left curved shape -->
+  <path d="M 150 250 Q 200 150 400 150 L 550 350 Q 350 300 150 450 Z" fill="#F4C430"/>
+  
+  <!-- Blue middle arrow/triangle pointing right -->
+  <path d="M 450 300 L 850 150 L 700 550 Z" fill="#0088CC"/>
+  
+  <!-- Yellow bottom-left curved shape -->
+  <path d="M 150 550 L 450 450 L 550 650 Q 300 700 150 850 Z" fill="#F4C430"/>
+  
+  <!-- Blue bottom semicircle -->
+  <path d="M 450 650 Q 700 650 850 850 Q 700 950 450 900 Z" fill="#0088CC"/>
+</svg>
