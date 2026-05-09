@@ -520,7 +520,7 @@ class _CardScanPageState extends State<CardScanPage> {
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => const PassportCardScanPage(showVisaSection: false),
+            builder: (_) => PassportCardScanPage(showVisaSection: false),
           ),
         );
       } else {
