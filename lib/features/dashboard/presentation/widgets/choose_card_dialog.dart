@@ -51,7 +51,7 @@ Future<void> _runMrzPassportScanner(NavigatorState nav) async {
     nav.push(
       MaterialPageRoute(
         builder: (_) =>
-            PassportFormPage(scannedResult: result, showVisaSection: false),
+            PassportFormPage(scannedResult: result, showVisaSection: true),
       ),
     );
   } on PlatformException catch (ex) {
@@ -96,7 +96,7 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
       );
       nav.push(
         MaterialPageRoute(
-          builder: (_) => const PassportFormPage(showVisaSection: false),
+          builder: (_) => const PassportFormPage(showVisaSection: true),
         ),
       );
       return;
@@ -113,7 +113,7 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
     nav.push(
       MaterialPageRoute(
         builder: (_) =>
-            PassportFormPage(scannedResult: result, showVisaSection: false),
+            PassportFormPage(scannedResult: result, showVisaSection: true),
       ),
     );
   } on PlatformException catch (ex) {
@@ -132,7 +132,7 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
       );
       nav.push(
         MaterialPageRoute(
-          builder: (_) => const PassportFormPage(showVisaSection: false),
+          builder: (_) => const PassportFormPage(showVisaSection: true),
         ),
       );
       return;
@@ -195,7 +195,7 @@ void showPassportSourceDialog(BuildContext context) {
                     MaterialPageRoute(
                       builder: (_) => const PassportCardScanPage(
                         autoOpenCamera: true,
-                        showVisaSection: false,
+                        showVisaSection: true,
                       ),
                     ),
                   );
@@ -226,7 +226,7 @@ void showPassportSourceDialog(BuildContext context) {
                     MaterialPageRoute(
                       builder: (_) => PassportCardScanPage(
                         initialFrontImagePath: picked.path,
-                        showVisaSection: false,
+                        showVisaSection: true,
                       ),
                     ),
                   );

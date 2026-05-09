@@ -236,7 +236,7 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) =>
-              PassportFormPage(scannedResult: result, showVisaSection: false),
+              PassportFormPage(scannedResult: result, showVisaSection: true),
         ),
       );
     }
