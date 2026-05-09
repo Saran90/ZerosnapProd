@@ -16,6 +16,29 @@ class PassportRepository {
     return {'Authorization': 'Bearer $token'};
   }
 
+  /// POST to /api/Zerosnap/GetGVPassportFront
+  /// Extracts passport data from a base64-encoded front image.
+  /// Always returns the raw response map so callers can read error messages.
+  /// Returns null only if the network/parse fails entirely.
+  Future<Map<String, dynamic>?> extractPassport({
+    required String frontBase64,
+  }) async {
+    try {
+      final url = await _prefs.getBaseUrl();
+      final apiKey = await _prefs.getApiKey();
+      final response = await _api.post(
+        ApiConstants.extractPassport,
+        baseUrl: url,
+        body: {'idbase64': frontBase64},
+        headers: {...await _authHeaders, 'IntelliKey': apiKey},
+      );
+      if (response is Map<String, dynamic>) return response;
+      return null;
+    } catch (e) {
+      return {'message': e.toString(), 'error': true};
+    }
+  }
+
   /// POST to /api/SavePassportAndVisa
   Future<bool> savePassport(Map<String, dynamic> body) async {
     final url = await _prefs.getBaseUrl();

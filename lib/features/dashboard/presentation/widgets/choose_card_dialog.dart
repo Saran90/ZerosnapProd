@@ -50,7 +50,8 @@ Future<void> _runMrzPassportScanner(NavigatorState nav) async {
     if (isDuplicate || !nav.context.mounted) return;
     nav.push(
       MaterialPageRoute(
-        builder: (_) => PassportFormPage(scannedResult: result),
+        builder: (_) =>
+            PassportFormPage(scannedResult: result, showVisaSection: false),
       ),
     );
   } on PlatformException catch (ex) {
@@ -93,7 +94,11 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      nav.push(MaterialPageRoute(builder: (_) => const PassportFormPage()));
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => const PassportFormPage(showVisaSection: false),
+        ),
+      );
       return;
     }
 
@@ -107,7 +112,8 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
     if (isDuplicate || !nav.context.mounted) return;
     nav.push(
       MaterialPageRoute(
-        builder: (_) => PassportFormPage(scannedResult: result),
+        builder: (_) =>
+            PassportFormPage(scannedResult: result, showVisaSection: false),
       ),
     );
   } on PlatformException catch (ex) {
@@ -124,7 +130,11 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      nav.push(MaterialPageRoute(builder: (_) => const PassportFormPage()));
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => const PassportFormPage(showVisaSection: false),
+        ),
+      );
       return;
     }
     ScaffoldMessenger.of(nav.context).showSnackBar(
@@ -174,16 +184,19 @@ void showPassportSourceDialog(BuildContext context) {
                 Navigator.of(dialogCtx).pop();
                 final session = await SharedPreferencesProvider()
                     .getLoginSession();
-                final useMrz = session?.scanByMrz ?? true;
+                final useMrz = session?.scanByMrz ?? false;
                 if (!nav.context.mounted) return;
                 if (useMrz) {
                   // MRZ camera scan → PassportFormPage
                   await _runMrzPassportScanner(nav);
                 } else {
-                  // OCR flow
+                  // OCR flow — open PassportCardScanPage with camera auto-launch
                   nav.push(
                     MaterialPageRoute(
-                      builder: (_) => const PassportCardScanPage(),
+                      builder: (_) => const PassportCardScanPage(
+                        autoOpenCamera: true,
+                        showVisaSection: false,
+                      ),
                     ),
                   );
                 }
@@ -197,7 +210,7 @@ void showPassportSourceDialog(BuildContext context) {
                 Navigator.of(dialogCtx).pop();
                 final session = await SharedPreferencesProvider()
                     .getLoginSession();
-                final useMrz = session?.scanByMrz ?? true;
+                final useMrz = session?.scanByMrz ?? false;
                 if (!nav.context.mounted) return;
                 if (useMrz) {
                   // MRZ gallery scan → PassportFormPage
@@ -213,6 +226,7 @@ void showPassportSourceDialog(BuildContext context) {
                     MaterialPageRoute(
                       builder: (_) => PassportCardScanPage(
                         initialFrontImagePath: picked.path,
+                        showVisaSection: false,
                       ),
                     ),
                   );

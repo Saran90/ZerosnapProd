@@ -127,7 +127,7 @@ class SharedPreferencesProvider {
       showGuestSignature: prefs.getBool(_keyShowGuestSignature) ?? false,
       showPrintMobileApp: prefs.getBool(_keyShowPrintMobileApp) ?? false,
       showFrroCheckOutInExt: prefs.getBool(_keyShowFrroCheckOutInExt) ?? false,
-      scanByMrz: prefs.getBool(_keyScanByMrz) ?? true,
+      scanByMrz: prefs.getBool(_keyScanByMrz) ?? false,
     );
   }
 
@@ -198,6 +198,6 @@ class LoginSession {
     this.showGuestSignature = false,
     this.showPrintMobileApp = false,
     this.showFrroCheckOutInExt = false,
-    this.scanByMrz = true, // default to MRZ scanner
+    this.scanByMrz = false, // default to OCR flow
   });
 }

@@ -235,7 +235,8 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
       // Passport mode — go straight to PassportFormPage, no intermediate sheet
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => PassportFormPage(scannedResult: result),
+          builder: (_) =>
+              PassportFormPage(scannedResult: result, showVisaSection: false),
         ),
       );
     }
