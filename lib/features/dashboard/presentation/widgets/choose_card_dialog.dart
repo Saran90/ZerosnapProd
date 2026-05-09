@@ -5,8 +5,10 @@ import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../scan/presentation/pages/card_scan_page.dart';
 import '../../../scan/presentation/pages/mrz_scanner_page.dart';
-import '../../../scan/presentation/pages/passport_card_scan_page.dart';
-import '../../../scan/presentation/pages/passport_form_page.dart';
+import '../../../scan/presentation/pages/passport_card_scan_page_domestic.dart';
+import '../../../scan/presentation/pages/passport_card_scan_page_landing.dart';
+import '../../../scan/presentation/pages/passport_form_page_domestic.dart';
+import '../../../scan/presentation/pages/passport_form_page_landing.dart';
 import '../../../scan/presentation/widgets/duplicate_guest_checker.dart';
 
 enum DomesticCardType { drivingLicense, aadhar, votersId, panCard, otherId }
@@ -31,8 +33,12 @@ extension DomesticCardTypeLabel on DomesticCardType {
 // ── MRZ scanner helper ────────────────────────────────────────────────────────
 
 /// Runs the MRZ passport camera scanner directly (no intermediate Flutter page).
-/// On success navigates to [PassportFormPage]. On cancel/error does nothing.
-Future<void> _runMrzPassportScanner(NavigatorState nav) async {
+/// On success navigates to the appropriate page based on [isDomesticCardFlow].
+/// On cancel/error does nothing.
+Future<void> _runMrzPassportScanner(
+  NavigatorState nav,
+  bool isDomesticCardFlow,
+) async {
   try {
     MrzScannerPage.setupForPassport();
     await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -48,12 +54,21 @@ Future<void> _runMrzPassportScanner(NavigatorState nav) async {
       cardType: GuestCardType.passport,
     );
     if (isDuplicate || !nav.context.mounted) return;
-    nav.push(
-      MaterialPageRoute(
-        builder: (_) =>
-            PassportFormPage(scannedResult: result, showVisaSection: true),
-      ),
-    );
+
+    // Navigate to the appropriate page based on flow type
+    if (isDomesticCardFlow) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PassportFormPageDomestic(scannedResult: result),
+        ),
+      );
+    } else {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PassportFormPageLanding(scannedResult: result),
+        ),
+      );
+    }
   } on PlatformException catch (ex) {
     if (!nav.context.mounted) return;
     if (ex.message?.contains('scannerWasDismissed') == true) return;
@@ -68,8 +83,12 @@ Future<void> _runMrzPassportScanner(NavigatorState nav) async {
 }
 
 /// Runs the MRZ gallery scan directly (no intermediate Flutter page).
-/// On success navigates to [PassportFormPage]. On cancel/error does nothing.
-Future<void> _runMrzGalleryScan(NavigatorState nav) async {
+/// On success navigates to the appropriate page based on [isDomesticCardFlow].
+/// On cancel/error does nothing.
+Future<void> _runMrzGalleryScan(
+  NavigatorState nav,
+  bool isDomesticCardFlow,
+) async {
   try {
     MrzScannerPage.setupForPassport();
     // Longer delay for gallery scan — more config messages need to be
@@ -94,11 +113,10 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      nav.push(
-        MaterialPageRoute(
-          builder: (_) => const PassportFormPage(showVisaSection: true),
-        ),
-      );
+      final targetPage = isDomesticCardFlow
+          ? const PassportFormPageDomestic()
+          : const PassportFormPageLanding();
+      nav.push(MaterialPageRoute(builder: (_) => targetPage));
       return;
     }
 
@@ -110,12 +128,21 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
       cardType: GuestCardType.passport,
     );
     if (isDuplicate || !nav.context.mounted) return;
-    nav.push(
-      MaterialPageRoute(
-        builder: (_) =>
-            PassportFormPage(scannedResult: result, showVisaSection: true),
-      ),
-    );
+
+    // Navigate to the appropriate page based on flow type
+    if (isDomesticCardFlow) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PassportFormPageDomestic(scannedResult: result),
+        ),
+      );
+    } else {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PassportFormPageLanding(scannedResult: result),
+        ),
+      );
+    }
   } on PlatformException catch (ex) {
     if (!nav.context.mounted) return;
     if (ex.message?.contains('scannerWasDismissed') == true) return;
@@ -130,11 +157,10 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      nav.push(
-        MaterialPageRoute(
-          builder: (_) => const PassportFormPage(showVisaSection: true),
-        ),
-      );
+      final targetPage = isDomesticCardFlow
+          ? const PassportFormPageDomestic()
+          : const PassportFormPageLanding();
+      nav.push(MaterialPageRoute(builder: (_) => targetPage));
       return;
     }
     ScaffoldMessenger.of(nav.context).showSnackBar(
@@ -153,7 +179,14 @@ Future<void> _runMrzGalleryScan(NavigatorState nav) async {
 /// Always shows Camera / Gallery chooser.
 /// - AppScanByMRZ=1 → Camera calls MRZ scanner, Gallery calls MRZ gallery scan
 /// - AppScanByMRZ=0 → Camera opens PassportCardScanPage, Gallery uses ImagePicker
-void showPassportSourceDialog(BuildContext context) {
+///
+/// [isDomesticCardFlow] indicates whether this is being called from:
+/// - true: Domestic card flow (use PassportCardScanPageDomestic - no visa)
+/// - false: Landing screen flow (use PassportCardScanPageLanding - with visa)
+void showPassportSourceDialog(
+  BuildContext context, {
+  bool isDomesticCardFlow = false,
+}) {
   // Always use the root navigator to ensure pushes work correctly even when
   // called from inside a dialog (where the local navigator may be stale).
   final nav = Navigator.of(context, rootNavigator: true);
@@ -187,18 +220,14 @@ void showPassportSourceDialog(BuildContext context) {
                 final useMrz = session?.scanByMrz ?? false;
                 if (!nav.context.mounted) return;
                 if (useMrz) {
-                  // MRZ camera scan → PassportFormPage
-                  await _runMrzPassportScanner(nav);
+                  // MRZ camera scan → appropriate PassportFormPage
+                  await _runMrzPassportScanner(nav, isDomesticCardFlow);
                 } else {
-                  // OCR flow — open PassportCardScanPage with camera auto-launch
-                  nav.push(
-                    MaterialPageRoute(
-                      builder: (_) => const PassportCardScanPage(
-                        autoOpenCamera: true,
-                        showVisaSection: true,
-                      ),
-                    ),
-                  );
+                  // OCR flow — open appropriate page with camera auto-launch
+                  final targetPage = isDomesticCardFlow
+                      ? const PassportCardScanPageDomestic(autoOpenCamera: true)
+                      : const PassportCardScanPageLanding(autoOpenCamera: true);
+                  nav.push(MaterialPageRoute(builder: (_) => targetPage));
                 }
               },
             ),
@@ -214,22 +243,22 @@ void showPassportSourceDialog(BuildContext context) {
                 if (!nav.context.mounted) return;
                 if (useMrz) {
                   // MRZ gallery scan → PassportFormPage
-                  await _runMrzGalleryScan(nav);
+                  await _runMrzGalleryScan(nav, isDomesticCardFlow);
                 } else {
-                  // OCR flow — pick image then open PassportCardScanPage
+                  // OCR flow — pick image then open appropriate page
                   final picked = await ImagePicker().pickImage(
                     source: ImageSource.gallery,
                     imageQuality: 100,
                   );
                   if (picked == null || !nav.context.mounted) return;
-                  nav.push(
-                    MaterialPageRoute(
-                      builder: (_) => PassportCardScanPage(
-                        initialFrontImagePath: picked.path,
-                        showVisaSection: true,
-                      ),
-                    ),
-                  );
+                  final targetPage = isDomesticCardFlow
+                      ? PassportCardScanPageDomestic(
+                          initialFrontImagePath: picked.path,
+                        )
+                      : PassportCardScanPageLanding(
+                          initialFrontImagePath: picked.path,
+                        );
+                  nav.push(MaterialPageRoute(builder: (_) => targetPage));
                 }
               },
             ),
@@ -353,7 +382,8 @@ class _ChooseCardDialog extends StatelessWidget {
               // Capture context before popping — nav.context is stale after pop
               final ctx = context;
               Navigator.of(context).pop();
-              showPassportSourceDialog(ctx);
+              // Landing screen flow - not domestic card flow
+              showPassportSourceDialog(ctx, isDomesticCardFlow: true);
             },
           ),
           ..._buildItem(
