@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
+import '../../domain/entities/lookup_models.dart';
 import '../../domain/entities/mrz_result.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
@@ -22,7 +23,15 @@ class PassportCardScanPage extends StatefulWidget {
   /// run OCR extraction — skipping the manual image capture step.
   final String? initialFrontImagePath;
 
-  const PassportCardScanPage({super.key, this.initialFrontImagePath});
+  /// When true, automatically opens the camera for the front image
+  /// as soon as the page loads (user already chose Camera in the dialog).
+  final bool autoOpenCamera;
+
+  const PassportCardScanPage({
+    super.key,
+    this.initialFrontImagePath,
+    this.autoOpenCamera = false,
+  });
 
   @override
   State<PassportCardScanPage> createState() => _PassportCardScanPageState();
@@ -42,6 +51,39 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 
   // Portrait from MRZ scan (base64) — used when no profile image file is captured
   String? _mrzPortraitBase64;
+
+  // ── Visa fields ───────────────────────────────────────────────────────────
+  String _visaType = '';
+  final _visaDocNoCtrl = TextEditingController();
+  final _visaIssuingDateCtrl = TextEditingController();
+  final _visaExpiryDateCtrl = TextEditingController();
+  final _visaPOICityCtrl = TextEditingController();
+  DateTime? _visaIssuingDate, _visaExpiryDate;
+  String? _visaImagePath;
+  String? _visaImageBackPath;
+  String? _visaImageStampPath;
+
+  List<MrzCountry> _countries = [];
+  List<VisaType> _visaDropTypes = [];
+  MrzCountry? _selectedVisaCountry;
+  VisaType? _selectedDropVisaType;
+  MrzResult? _scannedVisa;
+
+  static const _visaTypes = [
+    'MRZ Enable Visa',
+    'e-Visa',
+    'OCI',
+    'Diplomat',
+    'No Visa',
+  ];
+
+  bool get _isOCI => _visaType == 'OCI';
+  bool get _isEVisaOrDiplomat =>
+      _visaType == 'e-Visa' || _visaType == 'Diplomat';
+  bool get _showVisaFields =>
+      (_isEVisaOrDiplomat && _visaImagePath != null) ||
+      (_isOCI && _visaImagePath != null) ||
+      (_visaType == 'MRZ Enable Visa' && _scannedVisa != null);
 
   // ── Passport fields ───────────────────────────────────────────────────────
   final _surnameCtrl = TextEditingController();
@@ -73,16 +115,112 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
   bool _isSubmitting = false;
+  bool _isExtracting = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
+    _loadLookups();
     // If an image was pre-selected (e.g. from gallery in the dialog),
-    // set it as the front image immediately so the user can proceed to submit.
+    // set it as the front image and offer to crop the profile photo.
     if (widget.initialFrontImagePath != null) {
       _frontImagePath = widget.initialFrontImagePath!;
       _profileImagePath = widget.initialFrontImagePath!;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _offerProfileCrop(widget.initialFrontImagePath!),
+      );
+    }
+    // If user chose Camera in the dialog, open it automatically — no chooser
+    if (widget.autoOpenCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoCaptureFront());
+    }
+  }
+
+  Future<void> _loadLookups() async {
+    try {
+      final results = await Future.wait([
+        _repo.getCountries(),
+        _repo.getVisaTypes(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _countries = results[0] as List<MrzCountry>;
+        _visaDropTypes = results[1] as List<VisaType>;
+        _selectedDropVisaType = _visaDropTypes
+            .where((v) => v.visaId == 'T')
+            .firstOrNull;
+      });
+    } catch (_) {}
+  }
+
+  /// Shows the "Crop Profile Photo?" dialog for a given image path.
+  /// Shared by both the camera and upload flows.
+  Future<void> _offerProfileCrop(String imagePath) async {
+    if (!mounted) return;
+    final cropForProfile = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Crop Profile Photo?',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'Would you like to crop the profile photo from this passport image?',
+          style: TextStyle(fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey[700],
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Skip',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Crop',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (cropForProfile == true && mounted) {
+      final croppedPath = await cropImage(context, imagePath);
+      if (croppedPath != null && mounted) {
+        setState(() => _profileImagePath = croppedPath);
+      }
     }
   }
 
@@ -111,6 +249,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _durationCtrl,
       _checkoutDateCtrl,
       _nextDestCtrl,
+      _visaDocNoCtrl,
+      _visaIssuingDateCtrl,
+      _visaExpiryDateCtrl,
+      _visaPOICityCtrl,
     ]) {
       c.dispose();
     }
@@ -186,6 +328,19 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     return result ?? false;
   }
 
+  /// Directly opens the camera for the front image — no source chooser.
+  /// Directly opens the camera for the front image — no source chooser.
+  /// Used when the user already selected "Camera" in the dialog.
+  Future<void> _autoCaptureFront() async {
+    final path = await _captureImage(ImageSource.camera);
+    if (path == null || !mounted) return;
+    final ok = await _showImagePreviewSheet(path, 'Passport Front');
+    if (!ok) return;
+    setState(() => _frontImagePath = path);
+    await _offerProfileCrop(path);
+    if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
+  }
+
   void _pickFrontImage() {
     _showImageSourceSheet(
       title: 'Passport Bio-data Page',
@@ -194,10 +349,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         if (path == null || !mounted) return;
         final ok = await _showImagePreviewSheet(path, 'Passport Front');
         if (!ok) return;
-        setState(() {
-          _frontImagePath = path;
-          if (_profileImagePath.isEmpty) _profileImagePath = path;
-        });
+        setState(() => _frontImagePath = path);
+        await _offerProfileCrop(path);
+        if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
       },
     );
   }
@@ -228,39 +382,239 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
-  // ── MRZ Scan ──────────────────────────────────────────────────────────────
-  Future<void> _scanPassport() async {
-    final result = await Navigator.of(context).push<MrzResult>(
-      MaterialPageRoute(
-        builder: (_) => const MrzScannerPage(title: 'Scan Passport'),
-      ),
-    );
-    if (result == null) return;
-    setState(() {
-      _surnameCtrl.text = result.surname ?? '';
-      _givenNamesCtrl.text = result.givenNames ?? '';
-      _docNoCtrl.text = result.documentNumber ?? '';
-      _nationalityCtrl.text = result.nationality ?? '';
-      _issuingCountryCtrl.text = result.issuingCountry ?? '';
-      _dobCtrl.text = result.dateOfBirth ?? '';
-      _issuingDateCtrl.text = result.estIssuingDateReadable ?? '';
-      _expiryDateCtrl.text = result.expiryDate ?? '';
-      if (result.sex != null && ['M', 'F', 'O'].contains(result.sex)) {
-        _sex = result.sex!;
+  // ── OCR Extract ───────────────────────────────────────────────────────────
+  Future<void> _extractFromImage() async {
+    if (_frontImagePath.isEmpty) {
+      _showSnack('Please capture the passport front image first');
+      return;
+    }
+    setState(() => _isExtracting = true);
+    try {
+      final frontBase64 = base64Encode(
+        await File(_frontImagePath).readAsBytes(),
+      );
+      final response = await _repo.extractPassport(frontBase64: frontBase64);
+      if (!mounted) return;
+
+      if (response == null) {
+        _showSnack('Could not extract details. Please fill in manually.');
+        return;
       }
-      // Use portrait from MRZ scan as profile image base64 if available
-      if (result.portrait != null && result.portrait!.isNotEmpty) {
-        _profileImagePath = ''; // clear file path — portrait comes from MRZ
-        _mrzPortraitBase64 = result.portrait;
+
+      // Check HTTP code — 200 means success
+      final code = response['code'] as int? ?? response['Code'] as int?;
+      if (code != null && code != 200) {
+        _showSnack(
+          response['message'] as String? ??
+              response['Message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+        return;
+      }
+
+      // The actual passport data is in response['data'] with Guest_* keys
+      final nested = response['data'] ?? response['Data'];
+      if (nested is! Map<String, dynamic>) {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+        return;
+      }
+
+      _fillFromOcr(nested);
+
+      // Check if anything was actually populated
+      final anyFilled =
+          _docNoCtrl.text.isNotEmpty ||
+          _surnameCtrl.text.isNotEmpty ||
+          _givenNamesCtrl.text.isNotEmpty;
+
+      if (anyFilled) {
+        _showSnack('Details extracted successfully', isError: false);
+        await checkAndHandleDuplicate(
+          context,
+          documentNo: _docNoCtrl.text,
+          cardType: GuestCardType.indianPassport,
+        );
+      } else {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Extraction failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExtracting = false);
+    }
+  }
+
+  void _fillFromOcr(Map<String, dynamic> data) {
+    // Helper to read a non-null, non-empty string from multiple key names
+    String? pick(List<String> keys) {
+      for (final k in keys) {
+        final v = data[k];
+        if (v != null && v.toString().trim().isNotEmpty) {
+          return v.toString().trim();
+        }
+      }
+      return null;
+    }
+
+    setState(() {
+      // API returns Guest_Lastname / Guest_Firstname / Guest_DocumentNo etc.
+      _surnameCtrl.text =
+          pick(['Guest_Lastname', 'surname', 'last_name']) ?? '';
+      _givenNamesCtrl.text =
+          pick(['Guest_Firstname', 'given_names', 'givenName', 'first_name']) ??
+          '';
+      _docNoCtrl.text =
+          pick(['Guest_DocumentNo', 'document_number', 'documentNumber']) ?? '';
+      _nationalityCtrl.text =
+          pick(['Guest_NationalityTxt', 'Guest_Nationality', 'nationality']) ??
+          '';
+      _issuingCountryCtrl.text =
+          pick(['Guest_CountryofIssue', 'country', 'countryCode']) ?? '';
+      _dobCtrl.text = pick(['Guest_DOB', 'date_of_birth', 'dateOfBirth']) ?? '';
+      _expiryDateCtrl.text =
+          pick(['Guest_ExpiryDate', 'expiry_date', 'expiryDate']) ?? '';
+      _issuingDateCtrl.text =
+          pick(['Guest_DateOfIssue', 'date_of_issue', 'issueDate']) ?? '';
+      // Guest_City holds place of issue in this API
+      _placeOfIssueCtrl.text =
+          pick([
+            'Guest_City',
+            'Guest_POICity',
+            'place_of_issue',
+            'placeOfIssue',
+          ]) ??
+          '';
+      _addressCtrl.text = pick(['Guest_Address', 'address']) ?? '';
+      _emailCtrl.text = pick(['Guest_Email', 'email']) ?? '';
+      _phoneCtrl.text = pick(['Guest_PhoneNo', 'phone']) ?? '';
+
+      // API returns "Female" / "Male" — map to M / F
+      final genderRaw =
+          pick(['Guest_Gender', 'gender', 'sex'])?.toUpperCase() ?? '';
+      if (genderRaw.startsWith('F')) {
+        _sex = 'F';
+      } else if (genderRaw.startsWith('M')) {
+        _sex = 'M';
       }
     });
-    // Check for duplicate after MRZ scan populates document number
-    if (!mounted) return;
-    await checkAndHandleDuplicate(
-      context,
-      documentNo: result.documentNumber ?? '',
-      cardType: GuestCardType.indianPassport,
+  }
+
+  // ── Visa ──────────────────────────────────────────────────────────────────
+  void _onVisaTypeChanged(String type) {
+    setState(() {
+      _visaType = type;
+      _visaImagePath = null;
+      _visaImageBackPath = null;
+      _visaImageStampPath = null;
+      _scannedVisa = null;
+      if ((_isOCI || _isEVisaOrDiplomat) && _countries.isNotEmpty) {
+        _selectedVisaCountry = _countries
+            .where((c) => c.code == 'IND')
+            .firstOrNull;
+      }
+      if (type == 'e-Visa') {
+        _selectedDropVisaType = _visaDropTypes
+            .where((v) => v.visaId == 'EV')
+            .firstOrNull;
+      } else {
+        _selectedDropVisaType = _visaDropTypes
+            .where((v) => v.visaId == 'T')
+            .firstOrNull;
+      }
+    });
+    if (_isEVisaOrDiplomat || _isOCI) {
+      Future.microtask(_showVisaFrontSheet);
+    } else if (type == 'MRZ Enable Visa') {
+      Future.microtask(_scanVisa);
+    }
+  }
+
+  Future<void> _scanVisa() async {
+    final result = await Navigator.of(context).push<MrzResult>(
+      MaterialPageRoute(
+        builder: (_) =>
+            const MrzScannerPage(title: 'Scan Visa', visaMode: true),
+      ),
     );
+    if (result == null) {
+      if (mounted) setState(() => _visaType = '');
+      return;
+    }
+    setState(() {
+      _scannedVisa = result;
+      _visaDocNoCtrl.text = result.documentNumber ?? '';
+      _visaIssuingDateCtrl.text = result.estIssuingDateReadable ?? '';
+      _visaExpiryDateCtrl.text = result.expiryDate ?? '';
+      if (result.optionals != null && result.optionals!.isNotEmpty) {
+        _visaPOICityCtrl.text = result.optionals!;
+      }
+      _selectedVisaCountry = _countries
+          .where((c) => c.code == result.issuingCountry)
+          .firstOrNull;
+      _selectedVisaCountry ??= _countries
+          .where((c) => c.code == 'IND')
+          .firstOrNull;
+    });
+  }
+
+  void _showVisaFrontSheet() {
+    _showImageSourceSheet(
+      title: _isOCI ? 'OCI Front' : 'Visa Image',
+      onPicked: (src) async {
+        final path = await _captureImage(src);
+        if (path != null && mounted) setState(() => _visaImagePath = path);
+      },
+    );
+  }
+
+  void _showVisaBackSheet() {
+    _showImageSourceSheet(
+      title: 'OCI Back',
+      onPicked: (src) async {
+        final path = await _captureImage(src);
+        if (path != null && mounted) setState(() => _visaImageBackPath = path);
+      },
+    );
+  }
+
+  void _showVisaStampSheet() {
+    _showImageSourceSheet(
+      title: 'OCI Stamp',
+      onPicked: (src) async {
+        final path = await _captureImage(src);
+        if (path != null && mounted) setState(() => _visaImageStampPath = path);
+      },
+    );
+  }
+
+  int _visaTypeInt() {
+    switch (_visaType) {
+      case 'MRZ Enable Visa':
+        return 1;
+      case 'e-Visa':
+        return 2;
+      case 'OCI':
+        return 3;
+      case 'Diplomat':
+        return 4;
+      default:
+        return -1;
+    }
+  }
+
+  String? _toBase64FromPath(String? path) {
+    if (path == null || path.isEmpty) return null;
+    try {
+      return base64Encode(File(path).readAsBytesSync());
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -315,7 +669,25 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'User_Signature': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
             : '',
+        // Visa
+        'guest_VisaNo': _visaDocNoCtrl.text,
+        'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
+        'Guest_VisaPOICity': _visaPOICityCtrl.text,
+        'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
+        'guest_VisaValidTill': _visaExpiryDateCtrl.text,
+        'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
+        'VisaIDCardType': _visaTypeInt(),
       };
+
+      if (_isEVisaOrDiplomat) {
+        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+      } else if (_isOCI) {
+        body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
+        body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
+        body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
+      } else if (_visaType == 'MRZ Enable Visa') {
+        body['visaFile'] = _scannedVisa?.fullImage ?? '';
+      }
 
       final success = await _repo.savePassport(body);
       if (!mounted) return;
@@ -354,6 +726,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             _buildPassportSection(),
             const SizedBox(height: 24),
             _buildTravelSection(),
+            const SizedBox(height: 24),
+            _buildVisaSection(),
             const SizedBox(height: 24),
             _buildSignatureSection(),
           ],
@@ -416,6 +790,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                 imagePath: _profileImagePath,
                 onTap: _pickProfileImage,
                 icon: Icons.person_outline,
+                fitContain: true,
               ),
             ),
           ],
@@ -432,17 +807,33 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
-  // ── MRZ scan button ───────────────────────────────────────────────────────
+  // ── Extract button ────────────────────────────────────────────────────────
   Widget _buildExtractButton() {
     return SizedBox(
       width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _scanPassport,
-        icon: const Icon(Icons.document_scanner_outlined),
-        label: const Text('Scan Passport (MRZ)'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary),
+      child: ElevatedButton.icon(
+        onPressed: (_isExtracting || _frontImagePath.isEmpty)
+            ? null
+            : _extractFromImage,
+        icon: _isExtracting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.auto_fix_high_outlined, size: 18),
+        label: Text(
+          _isExtracting ? 'Extracting...' : 'Extract Details',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey[300],
+          elevation: 0,
           minimumSize: const Size(0, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -613,6 +1004,258 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
+  // ── Visa section ──────────────────────────────────────────────────────────
+  Widget _buildVisaSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Visa Information'),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Visa type — nullable dropdown matching Android
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: DropdownButtonFormField<String>(
+                  value: _visaType.isEmpty ? null : _visaType,
+                  hint: const Text('Select visa type'),
+                  decoration: InputDecoration(
+                    labelText: 'Type of Visa',
+                    labelStyle: const TextStyle(fontSize: 13),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                  ),
+                  items: _visaTypes
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) _onVisaTypeChanged(v);
+                  },
+                ),
+              ),
+
+              // OCI — 3 image slots
+              if (_isOCI) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildVisaImageTile(
+                        'OCI Front',
+                        _visaImagePath,
+                        _showVisaFrontSheet,
+                        () => setState(() => _visaImagePath = null),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildVisaImageTile(
+                        'OCI Back',
+                        _visaImageBackPath,
+                        _showVisaBackSheet,
+                        () => setState(() => _visaImageBackPath = null),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildVisaImageTile(
+                        'OCI Stamp',
+                        _visaImageStampPath,
+                        _showVisaStampSheet,
+                        () => setState(() => _visaImageStampPath = null),
+                      ),
+                    ),
+                    const Expanded(child: SizedBox()),
+                  ],
+                ),
+              ],
+
+              // e-Visa / Diplomat — single image
+              if (_isEVisaOrDiplomat) ...[
+                const SizedBox(height: 16),
+                _buildVisaImageTile(
+                  'Capture Visa',
+                  _visaImagePath,
+                  _showVisaFrontSheet,
+                  () => setState(() => _visaImagePath = null),
+                ),
+              ],
+
+              // Visa detail fields — matches Android: doc no, issuing country, visa type, dates, POI city
+              if (_showVisaFields) ...[
+                const SizedBox(height: 16),
+                _FormField(
+                  label: 'Document Number',
+                  controller: _visaDocNoCtrl,
+                ),
+                _CountryDropdown(
+                  label: 'Issuing Country',
+                  countries: _countries,
+                  selected: _selectedVisaCountry,
+                  onChanged: (c) => setState(() => _selectedVisaCountry = c),
+                ),
+                if (_visaDropTypes.isNotEmpty)
+                  _SearchableDropdown<VisaType>(
+                    label: 'Visa Type',
+                    items: _visaDropTypes,
+                    selected: _selectedDropVisaType,
+                    itemLabel: (v) => v.visaTypeName,
+                    onChanged: (v) => setState(() => _selectedDropVisaType = v),
+                  ),
+                _DateField(
+                  label: 'Issuing Date',
+                  controller: _visaIssuingDateCtrl,
+                  onTap: () => _pickDate(
+                    initial: _visaIssuingDate,
+                    first: DateTime(1950),
+                    last: DateTime.now(),
+                    helpText: 'Visa Issuing Date',
+                    onPicked: (d) => setState(() {
+                      _visaIssuingDate = d;
+                      _visaIssuingDateCtrl.text = _fmt(d);
+                    }),
+                  ),
+                ),
+                _DateField(
+                  label: 'Expiry Date',
+                  controller: _visaExpiryDateCtrl,
+                  onTap: () => _pickDate(
+                    initial: _visaExpiryDate ?? DateTime.now(),
+                    first: DateTime(1950),
+                    last: DateTime.now().add(const Duration(days: 365 * 20)),
+                    helpText: 'Visa Expiry Date',
+                    onPicked: (d) => setState(() {
+                      _visaExpiryDate = d;
+                      _visaExpiryDateCtrl.text = _fmt(d);
+                    }),
+                  ),
+                ),
+                _FormField(
+                  label: 'Place of Issue (City)',
+                  controller: _visaPOICityCtrl,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVisaImageTile(
+    String label,
+    String? imagePath,
+    VoidCallback onTap,
+    VoidCallback onRemove,
+  ) {
+    return GestureDetector(
+      onTap: imagePath == null ? onTap : null,
+      child: Container(
+        // Auto height when image is shown so full image is visible
+        height: imagePath != null ? null : 90,
+        constraints: const BoxConstraints(minHeight: 90),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: imagePath != null ? AppColors.primary : Colors.grey[300]!,
+            width: imagePath != null ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: imagePath != null
+            ? Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Image.file(
+                      File(imagePath),
+                      fit: BoxFit.contain, // full image, no cropping
+                      width: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: onRemove,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: Colors.grey[400],
+                      size: 28,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      label,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
   // ── Signature section ─────────────────────────────────────────────────────
   Widget _buildSignatureSection() {
     return Column(
@@ -712,6 +1355,7 @@ class _ImageTile extends StatelessWidget {
   final VoidCallback onTap;
   final IconData icon;
   final bool fullWidth;
+  final bool fitContain; // use BoxFit.contain instead of cover
 
   const _ImageTile({
     required this.label,
@@ -719,6 +1363,7 @@ class _ImageTile extends StatelessWidget {
     required this.onTap,
     this.icon = Icons.add_photo_alternate_outlined,
     this.fullWidth = false,
+    this.fitContain = false,
   });
 
   @override
@@ -738,7 +1383,10 @@ class _ImageTile extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: imagePath.isNotEmpty
-            ? Image.file(File(imagePath), fit: BoxFit.cover)
+            ? Image.file(
+                File(imagePath),
+                fit: fitContain ? BoxFit.contain : BoxFit.cover,
+              )
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -991,6 +1639,244 @@ class _DropdownField extends StatelessWidget {
             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
             .toList(),
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// ── Country Dropdown ──────────────────────────────────────────────────────────
+class _CountryDropdown extends StatelessWidget {
+  final String label;
+  final List<MrzCountry> countries;
+  final MrzCountry? selected;
+  final void Function(MrzCountry?) onChanged;
+
+  const _CountryDropdown({
+    required this.label,
+    required this.countries,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (countries.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: () => _showSearch(context),
+        borderRadius: BorderRadius.circular(10),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: const TextStyle(fontSize: 13),
+            suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppColors.primary,
+                width: 1.5,
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+          ),
+          child: Text(
+            selected?.name ?? '',
+            style: const TextStyle(fontSize: 15),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSearch(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CountrySearchSheet(
+        label: label,
+        countries: countries,
+        selected: selected,
+        onSelected: (c) {
+          Navigator.pop(context);
+          onChanged(c);
+        },
+      ),
+    );
+  }
+}
+
+class _CountrySearchSheet extends StatefulWidget {
+  final String label;
+  final List<MrzCountry> countries;
+  final MrzCountry? selected;
+  final void Function(MrzCountry) onSelected;
+
+  const _CountrySearchSheet({
+    required this.label,
+    required this.countries,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  State<_CountrySearchSheet> createState() => _CountrySearchSheetState();
+}
+
+class _CountrySearchSheetState extends State<_CountrySearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<MrzCountry> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.countries;
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.toLowerCase();
+      setState(() {
+        _filtered = widget.countries
+            .where(
+              (c) =>
+                  c.name.toLowerCase().contains(q) ||
+                  c.code.toLowerCase().contains(q),
+            )
+            .toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      builder: (_, scrollCtrl) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search ${widget.label}',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: _filtered.length,
+              itemBuilder: (_, i) {
+                final c = _filtered[i];
+                final isSelected = widget.selected?.code == c.code;
+                return ListTile(
+                  title: Text(c.name),
+                  subtitle: Text(c.code, style: const TextStyle(fontSize: 12)),
+                  selected: isSelected,
+                  selectedColor: AppColors.primary,
+                  selectedTileColor: AppColors.primary.withValues(alpha: 0.1),
+                  onTap: () => widget.onSelected(c),
+                  trailing: isSelected
+                      ? const Icon(Icons.check_circle, color: AppColors.primary)
+                      : null,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Searchable Dropdown ───────────────────────────────────────────────────────
+class _SearchableDropdown<T> extends StatelessWidget {
+  final String label;
+  final List<T> items;
+  final T? selected;
+  final String Function(T) itemLabel;
+  final void Function(T?) onChanged;
+
+  const _SearchableDropdown({
+    required this.label,
+    required this.items,
+    required this.selected,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<T>(
+        value: selected,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: items
+            .map(
+              (e) => DropdownMenuItem<T>(value: e, child: Text(itemLabel(e))),
+            )
+            .toList(),
+        onChanged: onChanged,
+        isExpanded: true,
       ),
     );
   }
