@@ -119,4 +119,20 @@ class PassportRepository {
         .map((e) => VehicleType.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  /// GET /api/GetStatesList
+  Future<List<IndianState>> getStates() async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      ApiConstants.states,
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => IndianState.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }

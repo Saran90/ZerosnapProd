@@ -33,6 +33,7 @@ class ApiConstants {
   static const String purposes = '/api/GetPurposeOfVisitList';
   static const String vehicleTypes = '/api/GetVehicleTypeList';
   static const String countries = '/api/GetNationalityList';
+  static const String states = '/api/GetStatesList';
 
   // Check-in / Check-out
   static const String getGuestData = '/api/GetFrroGuestDataMobile';

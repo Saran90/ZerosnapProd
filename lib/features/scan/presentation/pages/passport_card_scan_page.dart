@@ -75,6 +75,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 
   List<MrzCountry> _countries = [];
   List<VisaType> _visaDropTypes = [];
+  List<IndianState> _states = [];
   MrzCountry? _selectedVisaCountry;
   VisaType? _selectedDropVisaType;
   MrzResult? _scannedVisa;
@@ -186,11 +187,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       final results = await Future.wait([
         _repo.getCountries(),
         _repo.getVisaTypes(),
+        _repo.getStates(),
       ]);
       if (!mounted) return;
       setState(() {
         _countries = results[0] as List<MrzCountry>;
         _visaDropTypes = results[1] as List<VisaType>;
+        _states = results[2] as List<IndianState>;
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
             .firstOrNull;

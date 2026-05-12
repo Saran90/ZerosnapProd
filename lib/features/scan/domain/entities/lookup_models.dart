@@ -50,3 +50,15 @@ class VehicleType {
     vehicleTypeName: json['VehicleTypeName'] ?? '',
   );
 }
+
+class IndianState {
+  final String stateId;
+  final String stateName;
+
+  const IndianState({required this.stateId, required this.stateName});
+
+  factory IndianState.fromJson(Map<String, dynamic> json) => IndianState(
+    stateId: json['zs_stateid'] ?? '',
+    stateName: json['zs_statename'] ?? '',
+  );
+}
