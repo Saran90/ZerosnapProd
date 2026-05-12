@@ -121,7 +121,18 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _arrivedFromPlaceCtrl = TextEditingController();
   final _durationCtrl = TextEditingController();
   final _checkoutDateCtrl = TextEditingController();
-  final _nextDestCtrl = TextEditingController();
+
+  // ── Next Destination fields ───────────────────────────────────────────────
+  String _nextDestinationType =
+      'Inside India'; // 'Inside India' or 'Outside India'
+  final _nextDestStateCtrl = TextEditingController(); // For Inside India
+  final _nextDestDistrictCtrl = TextEditingController(); // For Inside India
+  final _nextDestPlaceIndiaCtrl = TextEditingController(); // For Inside India
+  final _nextDestCountryCtrl = TextEditingController(); // For Outside India
+  final _nextDestCityCtrl = TextEditingController(); // For Outside India
+  final _nextDestPlaceOutsideCtrl =
+      TextEditingController(); // For Outside India
+
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
   bool _isSubmitting = false;
@@ -281,7 +292,12 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _arrivedFromPlaceCtrl,
       _durationCtrl,
       _checkoutDateCtrl,
-      _nextDestCtrl,
+      _nextDestStateCtrl,
+      _nextDestDistrictCtrl,
+      _nextDestPlaceIndiaCtrl,
+      _nextDestCountryCtrl,
+      _nextDestCityCtrl,
+      _nextDestPlaceOutsideCtrl,
       _visaDocNoCtrl,
       _visaIssuingDateCtrl,
       _visaExpiryDateCtrl,
@@ -726,7 +742,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'IntendedDurationStayIndividualHouse': _durationCtrl.text,
         'Guest_HotelCheckOut': _checkoutDateCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
-        'NextDestination': _nextDestCtrl.text,
+        'NextDestinationType': _nextDestinationType,
+        'NextDestinationState': _nextDestStateCtrl.text,
+        'NextDestinationDistrict': _nextDestDistrictCtrl.text,
+        'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
+        'NextDestinationCountry': _nextDestCountryCtrl.text,
+        'NextDestinationCity': _nextDestCityCtrl.text,
+        'NextDestinationPlaceOutside': _nextDestPlaceOutsideCtrl.text,
         // Images
         'passportFile': frontBase64,
         'passportBackFile': backBase64,
@@ -1066,7 +1088,25 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             }),
           ),
         ),
-        _FormField(label: 'Next Destination', controller: _nextDestCtrl),
+        // Next Destination Type Dropdown
+        _DropdownField(
+          label: 'Next Destination',
+          value: _nextDestinationType,
+          items: const ['Inside India', 'Outside India'],
+          onChanged: (v) => setState(() => _nextDestinationType = v!),
+        ),
+        // Conditional fields for Inside India
+        if (_nextDestinationType == 'Inside India') ...[
+          _FormField(label: 'State', controller: _nextDestStateCtrl),
+          _FormField(label: 'District', controller: _nextDestDistrictCtrl),
+          _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
+        ],
+        // Conditional fields for Outside India
+        if (_nextDestinationType == 'Outside India') ...[
+          _FormField(label: 'Country', controller: _nextDestCountryCtrl),
+          _FormField(label: 'City', controller: _nextDestCityCtrl),
+          _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
+        ],
       ],
     );
   }
