@@ -125,6 +125,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
   bool _isSubmitting = false;
+  bool _isExtractingOcr = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -421,6 +422,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _showSnack('Please capture the passport front image first');
       return;
     }
+    setState(() => _isExtractingOcr = true);
     try {
       final frontBase64 = base64Encode(
         await File(_frontImagePath).readAsBytes(),
@@ -477,6 +479,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       }
     } catch (e) {
       if (mounted) _showSnack('Extraction failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExtractingOcr = false);
     }
   }
 
@@ -749,24 +753,55 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         title: Text(widget.pageTitle ?? 'Passport'),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildImagesSection(),
-            const SizedBox(height: 20),
-            _buildPassportSection(),
-            const SizedBox(height: 24),
-            _buildTravelSection(),
-            const SizedBox(height: 24),
-            if (widget.showVisaSection) ...[
-              _buildVisaSection(),
-              const SizedBox(height: 24),
-            ],
-            _buildSignatureSection(),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildImagesSection(),
+                const SizedBox(height: 20),
+                _buildPassportSection(),
+                const SizedBox(height: 24),
+                _buildTravelSection(),
+                const SizedBox(height: 24),
+                if (widget.showVisaSection) ...[
+                  _buildVisaSection(),
+                  const SizedBox(height: 24),
+                ],
+                _buildSignatureSection(),
+              ],
+            ),
+          ),
+          // OCR Loading Overlay
+          if (_isExtractingOcr)
+            Container(
+              color: Colors.black.withValues(alpha: 0.3),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Extracting passport details...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
