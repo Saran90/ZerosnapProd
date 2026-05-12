@@ -30,10 +30,12 @@ class ApiConstants {
 
   // Lookup lists
   static const String visaTypes = '/api/GetVisaTypeList';
+  static const String visaSubTypes = '/api/GetVisaSubTypeList';
   static const String purposes = '/api/GetPurposeOfVisitList';
   static const String vehicleTypes = '/api/GetVehicleTypeList';
   static const String countries = '/api/GetNationalityList';
   static const String states = '/api/GetStatesList';
+  static const String districts = '/api/GetDistrictList';
 
   // Check-in / Check-out
   static const String getGuestData = '/api/GetFrroGuestDataMobile';

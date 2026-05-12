@@ -22,10 +22,15 @@ class PassportFormPage extends StatefulWidget {
   /// When true, shows the visa section (used for landing screen flow).
   final bool showVisaSection;
 
+  /// Custom page title to display in AppBar
+  /// Defaults to 'Passport Details' if not provided
+  final String? pageTitle;
+
   const PassportFormPage({
     super.key,
     this.scannedResult,
     this.showVisaSection = true,
+    this.pageTitle,
   });
 
   @override
@@ -588,7 +593,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        title: const Text('Passport Details'),
+        title: Text(widget.pageTitle ?? 'Passport Details'),
         elevation: 0,
       ),
       body: _isLoading

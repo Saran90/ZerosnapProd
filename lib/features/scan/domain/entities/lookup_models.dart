@@ -10,6 +10,27 @@ class VisaType {
   );
 }
 
+class VisaSubType {
+  final String visaSubTypeId;
+  final String visaSubType;
+  final String visaTypeId;
+  final String visaSubTypeShort;
+
+  const VisaSubType({
+    required this.visaSubTypeId,
+    required this.visaSubType,
+    required this.visaTypeId,
+    required this.visaSubTypeShort,
+  });
+
+  factory VisaSubType.fromJson(Map<String, dynamic> json) => VisaSubType(
+    visaSubTypeId: json['VisaSubTypeId'] ?? '',
+    visaSubType: json['VisaSubType'] ?? '',
+    visaTypeId: json['VisaTypeId'] ?? '',
+    visaSubTypeShort: json['VisaSubTypeShort'] ?? '',
+  );
+}
+
 class Purpose {
   final String purposeId;
   final String purposeName;
@@ -60,5 +81,23 @@ class IndianState {
   factory IndianState.fromJson(Map<String, dynamic> json) => IndianState(
     stateId: json['zs_stateid'] ?? '',
     stateName: json['zs_statename'] ?? '',
+  );
+}
+
+class IndianDistrict {
+  final String districtId;
+  final String districtName;
+  final String stateId;
+
+  const IndianDistrict({
+    required this.districtId,
+    required this.districtName,
+    required this.stateId,
+  });
+
+  factory IndianDistrict.fromJson(Map<String, dynamic> json) => IndianDistrict(
+    districtId: json['FrroDistrictId'] ?? '',
+    districtName: json['FrroDistrict'] ?? '',
+    stateId: json['zs_stateid'] ?? '',
   );
 }

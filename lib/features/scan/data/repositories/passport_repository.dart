@@ -104,6 +104,22 @@ class PassportRepository {
         .toList();
   }
 
+  /// GET /api/GetVisaSubTypeList?id={visaTypeId}
+  Future<List<VisaSubType>> getVisaSubTypes(String visaTypeId) async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      '${ApiConstants.visaSubTypes}?id=$visaTypeId',
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => VisaSubType.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// GET /api/GetVehicleTypeList
   Future<List<VehicleType>> getVehicleTypes() async {
     final url = await _prefs.getBaseUrl();
@@ -133,6 +149,22 @@ class PassportRepository {
         : (response['Data'] ?? response['data'] ?? []);
     return (list as List)
         .map((e) => IndianState.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// GET /api/GetDistrictList?id={stateId}
+  Future<List<IndianDistrict>> getDistricts(String stateId) async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.get(
+      '${ApiConstants.districts}?id=$stateId',
+      baseUrl: url,
+      headers: await _authHeaders,
+    );
+    final list = response is List
+        ? response
+        : (response['Data'] ?? response['data'] ?? []);
+    return (list as List)
+        .map((e) => IndianDistrict.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 }

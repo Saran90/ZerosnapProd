@@ -76,8 +76,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   List<MrzCountry> _countries = [];
   List<VisaType> _visaDropTypes = [];
   List<IndianState> _states = [];
+  List<VisaSubType> _visaSubTypes = [];
   MrzCountry? _selectedVisaCountry;
   VisaType? _selectedDropVisaType;
+  VisaSubType? _selectedVisaSubType;
   MrzResult? _scannedVisa;
 
   static const _visaTypes = [
@@ -213,6 +215,20 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _districtsByState[stateId] = districts;
         // Reset selected district when state changes
         _nextDestDistrict = null;
+      });
+    } catch (_) {}
+  }
+
+  /// Load visa sub types for a given visa type ID
+  Future<void> _loadVisaSubTypes(String visaTypeId) async {
+    if (visaTypeId.isEmpty) return;
+    try {
+      final subTypes = await _repo.getVisaSubTypes(visaTypeId);
+      if (!mounted) return;
+      setState(() {
+        _visaSubTypes = subTypes;
+        // Reset selected sub type when visa type changes
+        _selectedVisaSubType = null;
       });
     } catch (_) {}
   }
@@ -610,6 +626,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _visaImageBackPath = null;
       _visaImageStampPath = null;
       _scannedVisa = null;
+      _selectedVisaSubType = null;
       if ((_isOCI || _isEVisaOrDiplomat) && _countries.isNotEmpty) {
         _selectedVisaCountry = _countries
             .where((c) => c.code == 'IND')
@@ -627,6 +644,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     });
     if (_isEVisaOrDiplomat || _isOCI) {
       Future.microtask(_showVisaFrontSheet);
+      // Load visa sub types for e-Visa
+      if (type == 'e-Visa') {
+        _loadVisaSubTypes('EV');
+      }
     } else if (type == 'MRZ Enable Visa') {
       Future.microtask(_scanVisa);
     }
@@ -783,6 +804,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
           'guest_VisaValidTill': _visaExpiryDateCtrl.text,
           'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
+          'guest_VisaSubType': _selectedVisaSubType?.visaSubTypeId ?? '',
           'VisaIDCardType': _visaTypeInt(),
         });
 
@@ -1283,6 +1305,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                     selected: _selectedDropVisaType,
                     itemLabel: (v) => v.visaTypeName,
                     onChanged: (v) => setState(() => _selectedDropVisaType = v),
+                  ),
+                // Visa Sub Type dropdown for e-Visa
+                if (_visaType == 'e-Visa' && _visaSubTypes.isNotEmpty)
+                  _SearchableDropdown<VisaSubType>(
+                    label: 'Visa Sub Type',
+                    items: _visaSubTypes,
+                    selected: _selectedVisaSubType,
+                    itemLabel: (v) => v.visaSubTypeShort,
+                    onChanged: (v) => setState(() => _selectedVisaSubType = v),
                   ),
                 _DateField(
                   label: 'Issuing Date',

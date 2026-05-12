@@ -6,7 +6,7 @@ import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import 'package:mrzscanner_flutter/mrzscanner_constants.dart';
 import '../../domain/entities/mrz_result.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
-import 'passport_form_page.dart';
+import 'passport_form_page_landing.dart';
 
 class MrzScannerPage extends StatefulWidget {
   final String title;
@@ -232,11 +232,10 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
       // Visa mode — return result directly to caller (PassportFormPage)
       Navigator.of(context).pop(result);
     } else {
-      // Passport mode — go straight to PassportFormPage, no intermediate sheet
+      // Passport mode — go straight to PassportFormPageLanding, no intermediate sheet
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              PassportFormPage(scannedResult: result, showVisaSection: true),
+          builder: (_) => PassportFormPageLanding(scannedResult: result),
         ),
       );
     }

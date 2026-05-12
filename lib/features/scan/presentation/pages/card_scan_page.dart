@@ -12,7 +12,7 @@ import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
-import 'passport_card_scan_page.dart';
+import 'passport_card_scan_page_domestic.dart';
 import 'profile_crop_page.dart';
 
 class CardScanPage extends StatefulWidget {
@@ -516,11 +516,11 @@ class _CardScanPageState extends State<CardScanPage> {
           '${widget.cardType.label} submitted successfully',
           isError: false,
         );
-        // Navigate to passport page without visa section
+        // Navigate to passport page without visa section (domestic card flow)
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => PassportCardScanPage(showVisaSection: false),
+            builder: (_) => const PassportCardScanPageDomestic(),
           ),
         );
       } else {
