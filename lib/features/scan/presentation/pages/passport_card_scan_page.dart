@@ -132,6 +132,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   void initState() {
     super.initState();
     _loadLookups();
+
+    // Set hotel arrival date and time to today's date and current time
+    final now = DateTime.now();
+    _hotelArrivalDate = now;
+    _hotelArrivalDateCtrl.text = _fmt(now);
+    _hotelArrivalTimeCtrl.text =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
     // If an image was pre-selected (e.g. from gallery in the dialog),
     // set it as the front image and offer to crop the profile photo.
     if (widget.initialFrontImagePath != null) {
