@@ -93,10 +93,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   bool get _isOCI => _visaType == 'OCI';
   bool get _isEVisaOrDiplomat =>
       _visaType == 'e-Visa' || _visaType == 'Diplomat';
-  bool get _showVisaFields =>
-      (_isEVisaOrDiplomat && _visaImagePath != null) ||
-      (_isOCI && _visaImagePath != null) ||
-      (_visaType == 'MRZ Enable Visa' && _scannedVisa != null);
+  bool get _showVisaFields => _visaType.isNotEmpty && _visaType != 'No Visa';
 
   // ── Passport fields ───────────────────────────────────────────────────────
   final _surnameCtrl = TextEditingController();
