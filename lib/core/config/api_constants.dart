@@ -21,6 +21,7 @@ class ApiConstants {
   static const String extractVoterId = '/api/intellilabs/GetVoterCardOCR';
   static const String extractAadhaar = '/api/intellilabs/GetAadharOCR';
   static const String extractPan = '/api/intellilabs/GetPanOCR';
+  static const String extractVisa = '/api/Zerosnap/GetGVVisa';
 
   // Verify endpoints
   static const String verifyDL = '/api/intellilabs/GetDLBasicVerify';

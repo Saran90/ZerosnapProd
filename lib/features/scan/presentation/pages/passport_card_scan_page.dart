@@ -142,6 +142,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 
   bool _isSubmitting = false;
   bool _isExtractingOcr = false;
+  bool _isExtractingVisa = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -686,7 +687,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       title: _isOCI ? 'OCI Front' : 'Visa Image',
       onPicked: (src) async {
         final path = await _captureImage(src);
-        if (path != null && mounted) setState(() => _visaImagePath = path);
+        if (path != null && mounted) {
+          setState(() => _visaImagePath = path);
+          // Automatically extract visa details for e-Visa and Diplomat
+          if (_isEVisaOrDiplomat) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _extractVisaFromImage();
+          }
+        }
       },
     );
   }
@@ -709,6 +717,91 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         if (path != null && mounted) setState(() => _visaImageStampPath = path);
       },
     );
+  }
+
+  /// Extract visa data from the captured visa image using OCR
+  Future<void> _extractVisaFromImage() async {
+    if (_visaImagePath == null || _visaImagePath!.isEmpty) return;
+
+    setState(() => _isExtractingVisa = true);
+    try {
+      final visaBytes = await File(_visaImagePath!).readAsBytes();
+      final visaBase64 = base64Encode(visaBytes);
+      final response = await _repo.extractVisa(visaBase64: visaBase64);
+      if (!mounted) return;
+
+      if (response == null) {
+        _showSnack('Could not extract visa details. Please fill in manually.');
+        return;
+      }
+
+      // Check HTTP code — 200 means success
+      final code = response['code'] as int? ?? response['Code'] as int?;
+      if (code != null && code != 200) {
+        _showSnack(
+          response['message'] as String? ??
+              response['Message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+        return;
+      }
+
+      // The actual visa data is in response['data'] with Guest_* keys
+      final nested = response['data'] ?? response['Data'];
+      if (nested is! Map<String, dynamic>) {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+        return;
+      }
+
+      _fillVisaFromOcr(nested);
+
+      // Check if anything was actually populated
+      final anyFilled =
+          _visaDocNoCtrl.text.isNotEmpty ||
+          _visaIssuingDateCtrl.text.isNotEmpty ||
+          _visaExpiryDateCtrl.text.isNotEmpty;
+
+      if (anyFilled) {
+        _showSnack('Visa details extracted successfully', isError: false);
+      } else {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Visa extraction failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExtractingVisa = false);
+    }
+  }
+
+  /// Fill visa fields from OCR extracted data
+  void _fillVisaFromOcr(Map<String, dynamic> data) {
+    // Helper to read a non-null, non-empty string from multiple key names
+    String? pick(List<String> keys) {
+      for (final k in keys) {
+        final v = data[k];
+        if (v != null && v.toString().trim().isNotEmpty) {
+          return v.toString().trim();
+        }
+      }
+      return null;
+    }
+
+    setState(() {
+      _visaDocNoCtrl.text =
+          pick(['Guest_VisaNo', 'visa_number', 'visaNumber']) ?? '';
+      _visaIssuingDateCtrl.text =
+          pick(['Guest_VisaDateofIssue', 'issue_date', 'issueDate']) ?? '';
+      _visaExpiryDateCtrl.text =
+          pick(['Guest_VisaValidTill', 'expiry_date', 'expiryDate']) ?? '';
+      _visaPOICityCtrl.text =
+          pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
+    });
   }
 
   int _visaTypeInt() {
@@ -882,6 +975,33 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                     const SizedBox(height: 16),
                     const Text(
                       'Extracting passport details...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // Visa Extraction Loading Overlay
+          if (_isExtractingVisa)
+            Container(
+              color: Colors.black.withValues(alpha: 0.3),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Extracting visa details...',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
