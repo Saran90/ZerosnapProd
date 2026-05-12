@@ -144,9 +144,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     if (widget.initialFrontImagePath != null) {
       _frontImagePath = widget.initialFrontImagePath!;
       _profileImagePath = widget.initialFrontImagePath!;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _offerProfileCrop(widget.initialFrontImagePath!),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _offerProfileCrop(widget.initialFrontImagePath!);
+        // Automatically extract details after profile crop dialog completes
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extractFromImage();
+        }
+      });
     }
     // If user chose Camera in the dialog, open it automatically — no chooser
     if (widget.autoOpenCamera) {
