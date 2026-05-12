@@ -31,11 +31,16 @@ class PassportCardScanPage extends StatefulWidget {
   /// When true, shows the visa section (used for landing screen flow).
   final bool showVisaSection;
 
+  /// Custom page title to display in AppBar
+  /// Defaults to 'Passport' if not provided
+  final String? pageTitle;
+
   const PassportCardScanPage({
     super.key,
     this.initialFrontImagePath,
     this.autoOpenCamera = false,
     this.showVisaSection = true,
+    this.pageTitle,
   });
 
   @override
@@ -336,6 +341,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   /// Directly opens the camera for the front image — no source chooser.
   /// Directly opens the camera for the front image — no source chooser.
   /// Used when the user already selected "Camera" in the dialog.
+  /// Automatically calls OCR API after image is captured.
   Future<void> _autoCaptureFront() async {
     final path = await _captureImage(ImageSource.camera);
     if (path == null || !mounted) return;
@@ -344,6 +350,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     setState(() => _frontImagePath = path);
     await _offerProfileCrop(path);
     if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
+    // Automatically extract details after image capture
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _extractFromImage();
+    }
   }
 
   void _pickFrontImage() {
@@ -357,6 +368,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         setState(() => _frontImagePath = path);
         await _offerProfileCrop(path);
         if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
+        // Automatically extract details after image is selected
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extractFromImage();
+        }
       },
     );
   }
@@ -721,7 +737,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        title: const Text('Passport'),
+        title: Text(widget.pageTitle ?? 'Passport'),
         elevation: 0,
       ),
       body: SingleChildScrollView(
