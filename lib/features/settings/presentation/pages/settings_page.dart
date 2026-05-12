@@ -40,41 +40,6 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  // ── HTTPS Address dialog ──────────────────────────────────────────────────
-  void _showChangeUrlDialog() {
-    final ctrl = TextEditingController(text: _baseUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('HTTPS Address'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(hintText: 'https://yourdomain.com'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final url = ctrl.text.trim();
-              if (url.isNotEmpty) {
-                await _prefs.saveBaseUrl(url);
-                if (!mounted) return;
-                setState(() => _baseUrl = url);
-              }
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Clear cache ───────────────────────────────────────────────────────────
   void _clearCache() {
     showDialog(
@@ -207,7 +172,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       _SettingsTile(
                         title: 'HTTPS Address',
                         subtitle: _baseUrl.isNotEmpty ? _baseUrl : 'Not set',
-                        onTap: _showChangeUrlDialog,
+                        onTap: () {}, // Disabled - no editing allowed
                       ),
                       const Divider(height: 1, indent: 16),
                       _SettingsTile(
