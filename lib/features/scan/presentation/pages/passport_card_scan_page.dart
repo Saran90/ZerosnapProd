@@ -125,7 +125,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
   bool _isSubmitting = false;
-  bool _isExtracting = false;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -417,7 +416,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _showSnack('Please capture the passport front image first');
       return;
     }
-    setState(() => _isExtracting = true);
     try {
       final frontBase64 = base64Encode(
         await File(_frontImagePath).readAsBytes(),
@@ -474,8 +472,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       }
     } catch (e) {
       if (mounted) _showSnack('Extraction failed: $e');
-    } finally {
-      if (mounted) setState(() => _isExtracting = false);
     }
   }
 
@@ -755,8 +751,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           children: [
             _buildImagesSection(),
             const SizedBox(height: 20),
-            _buildExtractButton(),
-            const SizedBox(height: 24),
             _buildPassportSection(),
             const SizedBox(height: 24),
             _buildTravelSection(),
@@ -840,42 +834,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           icon: Icons.add_photo_alternate_outlined,
         ),
       ],
-    );
-  }
-
-  // ── Extract button ────────────────────────────────────────────────────────
-  Widget _buildExtractButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: (_isExtracting || _frontImagePath.isEmpty)
-            ? null
-            : _extractFromImage,
-        icon: _isExtracting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.auto_fix_high_outlined, size: 18),
-        label: Text(
-          _isExtracting ? 'Extracting...' : 'Extract Details',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey[300],
-          elevation: 0,
-          minimumSize: const Size(0, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
     );
   }
 
