@@ -140,6 +140,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     _hotelArrivalTimeCtrl.text =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
+    // Set duration of stay to 1 as default
+    _durationCtrl.text = '1';
+
     // If an image was pre-selected (e.g. from gallery in the dialog),
     // set it as the front image and offer to crop the profile photo.
     if (widget.initialFrontImagePath != null) {
