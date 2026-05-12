@@ -143,6 +143,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     // Set duration of stay to 1 as default
     _durationCtrl.text = '1';
 
+    // Calculate and set initial checkout date
+    _updateCheckoutDate();
+
+    // Add listeners to recalculate checkout date when duration or check-in date changes
+    _durationCtrl.addListener(_updateCheckoutDate);
+    _hotelArrivalDateCtrl.addListener(_updateCheckoutDate);
+
     // If an image was pre-selected (e.g. from gallery in the dialog),
     // set it as the front image and offer to crop the profile photo.
     if (widget.initialFrontImagePath != null) {
@@ -298,6 +305,27 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Calculates and updates the checkout date based on hotel arrival date and duration
+  void _updateCheckoutDate() {
+    if (_hotelArrivalDate == null) return;
+
+    // Parse duration from the text field
+    final durationStr = _durationCtrl.text.trim();
+    if (durationStr.isEmpty) return;
+
+    final duration = int.tryParse(durationStr);
+    if (duration == null || duration <= 0) return;
+
+    // Calculate checkout date: arrival date + duration days
+    final checkoutDate = _hotelArrivalDate!.add(Duration(days: duration));
+
+    // Update the checkout date field and state variable
+    setState(() {
+      _checkoutDate = checkoutDate;
+      _checkoutDateCtrl.text = _fmt(checkoutDate);
+    });
   }
 
   Future<void> _pickDate({
@@ -997,6 +1025,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             onPicked: (d) => setState(() {
               _hotelArrivalDate = d;
               _hotelArrivalDateCtrl.text = _fmt(d);
+              // Recalculate checkout date when check-in date changes
+              _updateCheckoutDate();
             }),
           ),
         ),
