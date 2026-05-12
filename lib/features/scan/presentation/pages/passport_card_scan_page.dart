@@ -2045,7 +2045,6 @@ class _StateDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (states.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: DropdownButtonFormField<IndianState>(
@@ -2079,7 +2078,7 @@ class _StateDropdown extends StatelessWidget {
               ),
             )
             .toList(),
-        onChanged: onChanged,
+        onChanged: states.isEmpty ? null : onChanged,
         isExpanded: true,
       ),
     );
