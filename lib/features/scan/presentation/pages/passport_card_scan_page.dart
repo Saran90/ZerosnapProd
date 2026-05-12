@@ -126,13 +126,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   // ── Next Destination fields ───────────────────────────────────────────────
   String _nextDestinationType =
       'Inside India'; // 'Inside India' or 'Outside India'
-  final _nextDestStateCtrl = TextEditingController(); // For Inside India
-  final _nextDestDistrictCtrl = TextEditingController(); // For Inside India
+  IndianState? _nextDestState; // Selected state for Inside India
+  IndianDistrict? _nextDestDistrict; // Selected district for Inside India
   final _nextDestPlaceIndiaCtrl = TextEditingController(); // For Inside India
   MrzCountry? _nextDestCountry; // Selected country for Outside India
   final _nextDestCityCtrl = TextEditingController(); // For Outside India
   final _nextDestPlaceOutsideCtrl =
       TextEditingController(); // For Outside India
+  Map<String, List<IndianDistrict>> _districtsByState =
+      {}; // Map of stateId to districts
 
   DateTime? _arrivalInIndia, _hotelArrivalDate, _checkoutDate;
 
@@ -197,6 +199,20 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
             .firstOrNull;
+      });
+    } catch (_) {}
+  }
+
+  /// Load districts for a given state ID
+  Future<void> _loadDistrictsForState(String stateId) async {
+    if (stateId.isEmpty) return;
+    try {
+      final districts = await _repo.getDistricts(stateId);
+      if (!mounted) return;
+      setState(() {
+        _districtsByState[stateId] = districts;
+        // Reset selected district when state changes
+        _nextDestDistrict = null;
       });
     } catch (_) {}
   }
@@ -295,8 +311,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _arrivedFromPlaceCtrl,
       _durationCtrl,
       _checkoutDateCtrl,
-      _nextDestStateCtrl,
-      _nextDestDistrictCtrl,
       _nextDestPlaceIndiaCtrl,
       _nextDestCityCtrl,
       _nextDestPlaceOutsideCtrl,
@@ -745,8 +759,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'Guest_HotelCheckOut': _checkoutDateCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
         'NextDestinationType': _nextDestinationType,
-        'NextDestinationState': _nextDestStateCtrl.text,
-        'NextDestinationDistrict': _nextDestDistrictCtrl.text,
+        'NextDestinationState': _nextDestState?.stateId ?? '',
+        'NextDestinationDistrict': _nextDestDistrict?.districtId ?? '',
         'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
         'NextDestinationCountry': _nextDestCountry?.code ?? '',
         'NextDestinationCity': _nextDestCityCtrl.text,
@@ -1099,8 +1113,27 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         ),
         // Conditional fields for Inside India
         if (_nextDestinationType == 'Inside India') ...[
-          _FormField(label: 'State', controller: _nextDestStateCtrl),
-          _FormField(label: 'District', controller: _nextDestDistrictCtrl),
+          _StateDropdown(
+            label: 'State',
+            states: _states,
+            selected: _nextDestState,
+            onChanged: (state) {
+              setState(() => _nextDestState = state);
+              if (state != null) {
+                _loadDistrictsForState(state.stateId);
+              }
+            },
+          ),
+          _DistrictDropdown(
+            label: 'District',
+            districts: _nextDestState != null
+                ? (_districtsByState[_nextDestState!.stateId] ?? [])
+                : [],
+            selected: _nextDestDistrict,
+            onChanged: (district) =>
+                setState(() => _nextDestDistrict = district),
+            enabled: _nextDestState != null,
+          ),
           _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
         ],
         // Conditional fields for Outside India
@@ -1990,6 +2023,131 @@ class _SearchableDropdown<T> extends StatelessWidget {
             )
             .toList(),
         onChanged: onChanged,
+        isExpanded: true,
+      ),
+    );
+  }
+}
+
+// ── State Dropdown ────────────────────────────────────────────────────────────
+class _StateDropdown extends StatelessWidget {
+  final String label;
+  final List<IndianState> states;
+  final IndianState? selected;
+  final void Function(IndianState?) onChanged;
+
+  const _StateDropdown({
+    required this.label,
+    required this.states,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (states.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<IndianState>(
+        value: selected,
+        hint: const Text('Select state'),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: states
+            .map(
+              (s) => DropdownMenuItem<IndianState>(
+                value: s,
+                child: Text(s.stateName),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+        isExpanded: true,
+      ),
+    );
+  }
+}
+
+// ── District Dropdown ─────────────────────────────────────────────────────────
+class _DistrictDropdown extends StatelessWidget {
+  final String label;
+  final List<IndianDistrict> districts;
+  final IndianDistrict? selected;
+  final void Function(IndianDistrict?) onChanged;
+  final bool enabled;
+
+  const _DistrictDropdown({
+    required this.label,
+    required this.districts,
+    required this.selected,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<IndianDistrict>(
+        value: selected,
+        hint: const Text('Select district'),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: enabled ? Colors.grey[300]! : Colors.grey[200]!,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: enabled ? Colors.grey[300]! : Colors.grey[200]!,
+            ),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[200]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: enabled
+            ? districts
+                  .map(
+                    (d) => DropdownMenuItem<IndianDistrict>(
+                      value: d,
+                      child: Text(d.districtName),
+                    ),
+                  )
+                  .toList()
+            : [],
+        onChanged: enabled ? onChanged : null,
         isExpanded: true,
       ),
     );
