@@ -1,5 +1,6 @@
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/network/shared_preferences_provider.dart';
@@ -15,6 +16,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _prefs = SharedPreferencesProvider();
+  static const platform = MethodChannel('com.zerosnap.app/cache');
 
   String _username = '';
   String _hotelName = '';
@@ -41,6 +43,22 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ── Clear cache ───────────────────────────────────────────────────────────
+  Future<void> _clearNativeCache() async {
+    try {
+      await platform.invokeMethod('clearCache');
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing cache: ${e.message}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _clearCache() {
     showDialog(
       context: context,
@@ -71,6 +89,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 imageCache.clear();
                 imageCache.clearLiveImages();
               }
+
+              // Clear native app cache (visible in phone's Storage & Cache settings)
+              await _clearNativeCache();
 
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
