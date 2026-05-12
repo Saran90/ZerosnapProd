@@ -128,7 +128,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _nextDestStateCtrl = TextEditingController(); // For Inside India
   final _nextDestDistrictCtrl = TextEditingController(); // For Inside India
   final _nextDestPlaceIndiaCtrl = TextEditingController(); // For Inside India
-  final _nextDestCountryCtrl = TextEditingController(); // For Outside India
+  MrzCountry? _nextDestCountry; // Selected country for Outside India
   final _nextDestCityCtrl = TextEditingController(); // For Outside India
   final _nextDestPlaceOutsideCtrl =
       TextEditingController(); // For Outside India
@@ -295,7 +295,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _nextDestStateCtrl,
       _nextDestDistrictCtrl,
       _nextDestPlaceIndiaCtrl,
-      _nextDestCountryCtrl,
       _nextDestCityCtrl,
       _nextDestPlaceOutsideCtrl,
       _visaDocNoCtrl,
@@ -746,7 +745,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'NextDestinationState': _nextDestStateCtrl.text,
         'NextDestinationDistrict': _nextDestDistrictCtrl.text,
         'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
-        'NextDestinationCountry': _nextDestCountryCtrl.text,
+        'NextDestinationCountry': _nextDestCountry?.code ?? '',
         'NextDestinationCity': _nextDestCityCtrl.text,
         'NextDestinationPlaceOutside': _nextDestPlaceOutsideCtrl.text,
         // Images
@@ -1103,7 +1102,12 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         ],
         // Conditional fields for Outside India
         if (_nextDestinationType == 'Outside India') ...[
-          _FormField(label: 'Country', controller: _nextDestCountryCtrl),
+          _CountryDropdown(
+            label: 'Country',
+            countries: _countries,
+            selected: _nextDestCountry,
+            onChanged: (c) => setState(() => _nextDestCountry = c),
+          ),
           _FormField(label: 'City', controller: _nextDestCityCtrl),
           _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
         ],
