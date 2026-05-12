@@ -70,7 +70,6 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
     CheckInGuest event,
     Emitter<GuestListState> emit,
   ) async {
-    final currentState = state;
     emit(GuestCheckInProgress(event.guestdataId));
 
     final result = await checkInGuest(
@@ -80,12 +79,15 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
       userId: event.userId,
     );
 
-    result.fold(
-      (failure) =>
-          emit(GuestCheckInFailure(event.guestdataId, failure.message)),
-      (success) {
+    await result.fold(
+      (failure) async {
+        emit(GuestCheckInFailure(event.guestdataId, failure.message));
+      },
+      (success) async {
         if (success) {
           emit(GuestCheckInSuccess(event.guestdataId));
+          // Refresh the guest list to show updated check-in status
+          await _fetchGuests(event.branchId, event.userId, 1, emit);
         } else {
           emit(
             GuestCheckInFailure(
@@ -96,18 +98,12 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
         }
       },
     );
-
-    // Restore previous list state so the UI doesn't go blank
-    if (currentState is GuestListLoaded) {
-      emit(currentState);
-    }
   }
 
   Future<void> _onCheckOutGuest(
     CheckOutGuest event,
     Emitter<GuestListState> emit,
   ) async {
-    final currentState = state;
     emit(GuestCheckOutProgress(event.guestdataId));
 
     final result = await checkOutGuest(
@@ -116,12 +112,15 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
       userId: event.userId,
     );
 
-    result.fold(
-      (failure) =>
-          emit(GuestCheckOutFailure(event.guestdataId, failure.message)),
-      (success) {
+    await result.fold(
+      (failure) async {
+        emit(GuestCheckOutFailure(event.guestdataId, failure.message));
+      },
+      (success) async {
         if (success) {
           emit(GuestCheckOutSuccess(event.guestdataId));
+          // Refresh the guest list to show updated check-out status
+          await _fetchGuests(event.branchId, event.userId, 2, emit);
         } else {
           emit(
             GuestCheckOutFailure(
@@ -132,11 +131,6 @@ class GuestListBloc extends Bloc<GuestListEvent, GuestListState> {
         }
       },
     );
-
-    // Restore previous list state so the UI doesn't go blank
-    if (currentState is GuestListLoaded) {
-      emit(currentState);
-    }
   }
 
   Future<void> _fetchGuests(

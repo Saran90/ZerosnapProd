@@ -45,13 +45,19 @@ class _PassportFormPageState extends State<PassportFormPage> {
   List<MrzCountry> _countries = [];
   List<Purpose> _purposes = [];
   List<VisaType> _visaDropTypes = [];
+  List<IndianState> _states = [];
+  List<VisaSubType> _visaSubTypes = [];
 
   MrzCountry? _selectedIssuingCountry;
   MrzCountry? _selectedNationality;
-  MrzCountry? _selectedArrivedFromCountry;
   MrzCountry? _selectedVisaCountry;
+  MrzCountry? _nextDestCountry;
   Purpose? _selectedPurpose;
   VisaType? _selectedDropVisaType;
+  VisaSubType? _selectedVisaSubType;
+  IndianState? _nextDestState;
+  IndianDistrict? _nextDestDistrict;
+  Map<String, List<IndianDistrict>> _districtsByState = {};
 
   // ── Portrait ──────────────────────────────────────────────────────────────
   String? _portraitBase64;
@@ -75,15 +81,24 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   // ── Travel fields ─────────────────────────────────────────────────────────
   final _arrivalInIndiaCtrl = TextEditingController();
+  final _arrivalTimeCtrl = TextEditingController();
+  final _hotelArrivalDateCtrl = TextEditingController();
+  final _hotelArrivalTimeCtrl = TextEditingController();
+  final _arrivedFromCountryCtrl = TextEditingController();
   final _arrivedFromCityCtrl = TextEditingController();
   final _arrivedFromPlaceCtrl = TextEditingController();
   final _durationOfStayCtrl = TextEditingController();
   final _checkoutDateCtrl = TextEditingController();
-  DateTime? _arrivalInIndia;
-  DateTime _checkoutDate = DateTime.now().add(const Duration(days: 1));
 
-  // ── Other details ─────────────────────────────────────────────────────────
-  final _roomNoCtrl = TextEditingController();
+  // ── Next Destination fields ───────────────────────────────────────────────
+  String _nextDestinationType = 'Inside India';
+  final _nextDestPlaceIndiaCtrl = TextEditingController();
+  final _nextDestCityCtrl = TextEditingController();
+  final _nextDestPlaceOutsideCtrl = TextEditingController();
+
+  DateTime? _arrivalInIndia;
+  DateTime? _hotelArrivalDate;
+  DateTime? _checkoutDate;
 
   // ── Visa fields ───────────────────────────────────────────────────────────
   String _visaType = '';
@@ -96,10 +111,12 @@ class _PassportFormPageState extends State<PassportFormPage> {
   String? _visaImagePath;
   String? _visaImageBackPath;
   String? _visaImageStampPath;
+  String? _backImagePath;
   MrzResult? _scannedVisa;
 
   bool _isSubmitting = false;
   bool _isLoading = true;
+  bool _isExtractingVisa = false;
 
   static const _visaTypes = [
     'MRZ Enable Visa',
@@ -112,11 +129,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
   bool get _isOCI => _visaType == 'OCI';
   bool get _isEVisaOrDiplomat =>
       _visaType == 'e-Visa' || _visaType == 'Diplomat';
-  bool get _showVisaImageUpload => _isOCI || _isEVisaOrDiplomat;
-  bool get _showVisaFields =>
-      (_isEVisaOrDiplomat && _visaImagePath != null) ||
-      (_isOCI && _visaImagePath != null) ||
-      (_visaType == 'MRZ Enable Visa' && _scannedVisa != null);
+  bool get _showVisaFields => _visaType.isNotEmpty && _visaType != 'No Visa';
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -124,8 +137,24 @@ class _PassportFormPageState extends State<PassportFormPage> {
     super.initState();
     _prefill();
     _loadLookups();
-    _checkoutDateCtrl.text = _fmt(_checkoutDate);
-    _durationOfStayCtrl.addListener(_onDurationChanged);
+
+    // Set hotel arrival date and time to today's date and current time
+    final now = DateTime.now();
+    _hotelArrivalDate = now;
+    _hotelArrivalDateCtrl.text = _fmt(now);
+    _hotelArrivalTimeCtrl.text =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    // Set duration of stay to 1 as default
+    _durationOfStayCtrl.text = '1';
+
+    // Calculate and set initial checkout date
+    _updateCheckoutDate();
+
+    // Add listeners to recalculate checkout date when duration or check-in date changes
+    _durationOfStayCtrl.addListener(_updateCheckoutDate);
+    _hotelArrivalDateCtrl.addListener(_updateCheckoutDate);
+
     // Check for duplicate after prefill (post-frame so context is ready)
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkDuplicate());
   }
@@ -138,16 +167,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
       documentNo: docNo,
       cardType: GuestCardType.passport,
     );
-  }
-
-  void _onDurationChanged() {
-    final days = int.tryParse(_durationOfStayCtrl.text);
-    if (days != null) {
-      setState(() {
-        _checkoutDate = DateTime.now().add(Duration(days: days));
-        _checkoutDateCtrl.text = _fmt(_checkoutDate);
-      });
-    }
   }
 
   void _prefill() {
@@ -169,12 +188,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
         _repo.getCountries(),
         _repo.getPurposes(),
         _repo.getVisaTypes(),
+        _repo.getStates(),
       ]);
       if (!mounted) return;
       setState(() {
         _countries = results[0] as List<MrzCountry>;
         _purposes = results[1] as List<Purpose>;
         _visaDropTypes = results[2] as List<VisaType>;
+        _states = results[3] as List<IndianState>;
 
         final r = widget.scannedResult;
         if (r != null) {
@@ -199,9 +220,59 @@ class _PassportFormPageState extends State<PassportFormPage> {
     }
   }
 
+  /// Load districts for a given state ID
+  Future<void> _loadDistrictsForState(String stateId) async {
+    if (stateId.isEmpty) return;
+    try {
+      final districts = await _repo.getDistricts(stateId);
+      if (!mounted) return;
+      setState(() {
+        _districtsByState[stateId] = districts;
+        // Reset selected district when state changes
+        _nextDestDistrict = null;
+      });
+    } catch (_) {}
+  }
+
+  /// Load visa sub types for a given visa type ID
+  Future<void> _loadVisaSubTypes(String visaTypeId) async {
+    if (visaTypeId.isEmpty) return;
+    try {
+      final subTypes = await _repo.getVisaSubTypes(visaTypeId);
+      if (!mounted) return;
+      setState(() {
+        _visaSubTypes = subTypes;
+        // Reset selected sub type when visa type changes
+        _selectedVisaSubType = null;
+      });
+    } catch (_) {}
+  }
+
+  /// Calculates and updates the checkout date based on hotel arrival date and duration
+  void _updateCheckoutDate() {
+    if (_hotelArrivalDate == null) return;
+
+    // Parse duration from the text field
+    final durationStr = _durationOfStayCtrl.text.trim();
+    if (durationStr.isEmpty) return;
+
+    final duration = int.tryParse(durationStr);
+    if (duration == null || duration <= 0) return;
+
+    // Calculate checkout date: arrival date + duration days
+    final checkoutDate = _hotelArrivalDate!.add(Duration(days: duration));
+
+    // Update the checkout date field and state variable
+    setState(() {
+      _checkoutDate = checkoutDate;
+      _checkoutDateCtrl.text = _fmt(checkoutDate);
+    });
+  }
+
   @override
   void dispose() {
-    _durationOfStayCtrl.removeListener(_onDurationChanged);
+    _durationOfStayCtrl.removeListener(_updateCheckoutDate);
+    _hotelArrivalDateCtrl.removeListener(_updateCheckoutDate);
     for (final c in [
       _surnameCtrl,
       _givenNamesCtrl,
@@ -214,11 +285,17 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _emailCtrl,
       _phoneCtrl,
       _arrivalInIndiaCtrl,
+      _arrivalTimeCtrl,
+      _hotelArrivalDateCtrl,
+      _hotelArrivalTimeCtrl,
+      _arrivedFromCountryCtrl,
       _arrivedFromCityCtrl,
       _arrivedFromPlaceCtrl,
       _durationOfStayCtrl,
       _checkoutDateCtrl,
-      _roomNoCtrl,
+      _nextDestPlaceIndiaCtrl,
+      _nextDestCityCtrl,
+      _nextDestPlaceOutsideCtrl,
       _visaDocNoCtrl,
       _visaIssuingDateCtrl,
       _visaExpiryDateCtrl,
@@ -310,7 +387,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
   void _showVisaFrontSheet() {
     _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (src) async {
       final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _visaImagePath = path);
+      if (path != null && mounted) {
+        setState(() => _visaImagePath = path);
+        // Automatically extract visa details for e-Visa and Diplomat
+        if (_isEVisaOrDiplomat) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extractVisaFromImage();
+        }
+      }
     });
   }
 
@@ -358,7 +442,8 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _visaImageBackPath = null;
       _visaImageStampPath = null;
       _scannedVisa = null;
-      if (_showVisaImageUpload && _countries.isNotEmpty) {
+      _selectedVisaSubType = null;
+      if ((_isOCI || _isEVisaOrDiplomat) && _countries.isNotEmpty) {
         _selectedVisaCountry = _countries
             .where((c) => c.code == 'IND')
             .firstOrNull;
@@ -375,6 +460,10 @@ class _PassportFormPageState extends State<PassportFormPage> {
     });
     if (_isEVisaOrDiplomat || _isOCI) {
       Future.microtask(_showVisaFrontSheet);
+      // Load visa sub types for e-Visa
+      if (type == 'e-Visa') {
+        _loadVisaSubTypes('EV');
+      }
     } else if (type == 'MRZ Enable Visa') {
       Future.microtask(_scanVisa);
     }
@@ -405,6 +494,91 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _selectedVisaCountry ??= _countries
           .where((c) => c.code == 'IND')
           .firstOrNull;
+    });
+  }
+
+  /// Extract visa data from the captured visa image using OCR
+  Future<void> _extractVisaFromImage() async {
+    if (_visaImagePath == null || _visaImagePath!.isEmpty) return;
+
+    setState(() => _isExtractingVisa = true);
+    try {
+      final visaBytes = await File(_visaImagePath!).readAsBytes();
+      final visaBase64 = base64Encode(visaBytes);
+      final response = await _repo.extractVisa(visaBase64: visaBase64);
+      if (!mounted) return;
+
+      if (response == null) {
+        _showSnack('Could not extract visa details. Please fill in manually.');
+        return;
+      }
+
+      // Check HTTP code — 200 means success
+      final code = response['code'] as int? ?? response['Code'] as int?;
+      if (code != null && code != 200) {
+        _showSnack(
+          response['message'] as String? ??
+              response['Message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+        return;
+      }
+
+      // The actual visa data is in response['data'] with Guest_* keys
+      final nested = response['data'] ?? response['Data'];
+      if (nested is! Map<String, dynamic>) {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+        return;
+      }
+
+      _fillVisaFromOcr(nested);
+
+      // Check if anything was actually populated
+      final anyFilled =
+          _visaDocNoCtrl.text.isNotEmpty ||
+          _visaIssuingDateCtrl.text.isNotEmpty ||
+          _visaExpiryDateCtrl.text.isNotEmpty;
+
+      if (anyFilled) {
+        _showSnack('Visa details extracted successfully', isError: false);
+      } else {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract visa details. Please fill in manually.',
+        );
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Visa extraction failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExtractingVisa = false);
+    }
+  }
+
+  /// Fill visa fields from OCR extracted data
+  void _fillVisaFromOcr(Map<String, dynamic> data) {
+    // Helper to read a non-null, non-empty string from multiple key names
+    String? pick(List<String> keys) {
+      for (final k in keys) {
+        final v = data[k];
+        if (v != null && v.toString().trim().isNotEmpty) {
+          return v.toString().trim();
+        }
+      }
+      return null;
+    }
+
+    setState(() {
+      _visaDocNoCtrl.text =
+          pick(['Guest_VisaNo', 'visa_number', 'visaNumber']) ?? '';
+      _visaIssuingDateCtrl.text =
+          pick(['Guest_VisaDateofIssue', 'issue_date', 'issueDate']) ?? '';
+      _visaExpiryDateCtrl.text =
+          pick(['Guest_VisaValidTill', 'expiry_date', 'expiryDate']) ?? '';
+      _visaPOICityCtrl.text =
+          pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
     });
   }
 
@@ -517,12 +691,11 @@ class _PassportFormPageState extends State<PassportFormPage> {
     setState(() => _isSubmitting = true);
     try {
       final body = <String, dynamic>{
-        'guest_Firstname': _surnameCtrl.text,
-        'guest_Lastname': _givenNamesCtrl.text,
+        'guest_Firstname': _givenNamesCtrl.text,
+        'guest_Lastname': _surnameCtrl.text,
         'guest_Father': _givenNamesCtrl.text,
         'guest_DocumentNo': _docNoCtrl.text,
         'guest_CountryofIssue': _selectedIssuingCountry?.code ?? '',
-        'guest_Country': _selectedNationality?.code ?? '',
         'guest_Nationality': _selectedNationality?.code ?? '',
         'guest_DOB': _dobCtrl.text,
         'guest_Gender': _sex,
@@ -532,17 +705,29 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'guest_Address': _addressCtrl.text,
         'Guest_Email': _emailCtrl.text,
         'Guest_PhoneNo': _phoneCtrl.text,
-        'guest_PurposeofVisit': _selectedPurpose?.purposeId ?? '',
+        // Travel
         'DateOfArrivalInIndia': _arrivalInIndiaCtrl.text,
-        'ArrivedFromCountry': _selectedArrivedFromCountry?.code ?? '',
+        'Arrival_Time': _arrivalTimeCtrl.text,
+        'Arrival_Date': _hotelArrivalDateCtrl.text,
+        'Arrival_Time_Hotel': _hotelArrivalTimeCtrl.text,
+        'ArrivedFromCountry': _arrivedFromCountryCtrl.text,
         'ArrivedFromCity': _arrivedFromCityCtrl.text,
         'ArrivedFromPlace': _arrivedFromPlaceCtrl.text,
         'IntendedDurationStayIndividualHouse': _durationOfStayCtrl.text,
-        'Guest_HotelCheckOutDate': _checkoutDate.toIso8601String(),
-        'GuestRoomNo': _roomNoCtrl.text,
+        'Guest_HotelCheckOut': _checkoutDateCtrl.text,
+        'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
+        'NextDestinationType': _nextDestinationType,
+        'NextDestinationState': _nextDestState?.stateId ?? '',
+        'NextDestinationDistrict': _nextDestDistrict?.districtId ?? '',
+        'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
+        'NextDestinationCountry': _nextDestCountry?.code ?? '',
+        'NextDestinationCity': _nextDestCityCtrl.text,
+        'NextDestinationPlaceOutside': _nextDestPlaceOutsideCtrl.text,
+        // Images
         'passportFile': widget.scannedResult?.fullImage ?? '',
+        'passportBackFile': _toBase64FromPath(_backImagePath) ?? '',
         'profileImageFile': _portraitBase64 ?? '',
-        'GuestSignatureFile': _signatureBytes != null
+        'User_Signature': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
             : '',
       };
@@ -556,6 +741,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
           'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
           'guest_VisaValidTill': _visaExpiryDateCtrl.text,
           'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
+          'guest_VisaSubType': _selectedVisaSubType?.visaSubTypeId ?? '',
           'VisaIDCardType': _visaTypeInt(),
         });
 
@@ -598,26 +784,70 @@ class _PassportFormPageState extends State<PassportFormPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildPortraitCard(),
-                  const SizedBox(height: 16),
-                  _buildPassportCard(),
-                  const SizedBox(height: 16),
-                  _buildTravelCard(),
-                  const SizedBox(height: 16),
-                  if (widget.showVisaSection) ...[
-                    _buildVisaCard(),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildOtherDetailsCard(),
-                  const SizedBox(height: 16),
-                  _buildSignatureCard(),
-                ],
-              ),
+          : Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPortraitCard(),
+                      const SizedBox(height: 16),
+                      _buildPassportCard(),
+                      const SizedBox(height: 16),
+                      _buildTravelCard(),
+                      const SizedBox(height: 16),
+                      if (widget.showVisaSection) ...[
+                        _buildVisaCard(),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildSignatureCard(),
+                    ],
+                  ),
+                ),
+                // Visa Extraction Loading Overlay
+                if (_isExtractingVisa)
+                  Container(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Extracting visa details...',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
       bottomNavigationBar: SafeArea(
         child: Container(
@@ -872,37 +1102,59 @@ class _PassportFormPageState extends State<PassportFormPage> {
             ),
             const SizedBox(height: 20),
             _DateField(
-              label: 'Arrival In India',
+              label: 'Date of Arrival in India',
               controller: _arrivalInIndiaCtrl,
               onTap: () => _pickDate(
                 initial: _arrivalInIndia,
-                first: DateTime.now().subtract(const Duration(days: 365 * 15)),
-                last: DateTime.now(),
-                helpText: 'Arrival In India',
+                first: DateTime(2000),
+                last: DateTime.now().add(const Duration(days: 365 * 5)),
+                helpText: 'Date of Arrival in India',
                 onPicked: (d) => setState(() {
                   _arrivalInIndia = d;
                   _arrivalInIndiaCtrl.text = _fmt(d);
                 }),
               ),
             ),
-            _CountryDropdown(
+            _FormField(
+              label: 'Arrival Time (India)',
+              controller: _arrivalTimeCtrl,
+              keyboardType: TextInputType.datetime,
+            ),
+            _DateField(
+              label: 'Hotel Check-in Date',
+              controller: _hotelArrivalDateCtrl,
+              onTap: () => _pickDate(
+                initial: _hotelArrivalDate,
+                first: DateTime(2000),
+                last: DateTime.now().add(const Duration(days: 365 * 5)),
+                helpText: 'Hotel Check-in Date',
+                onPicked: (d) => setState(() {
+                  _hotelArrivalDate = d;
+                  _hotelArrivalDateCtrl.text = _fmt(d);
+                  // Recalculate checkout date when check-in date changes
+                  _updateCheckoutDate();
+                }),
+              ),
+            ),
+            _FormField(
+              label: 'Hotel Check-in Time',
+              controller: _hotelArrivalTimeCtrl,
+              keyboardType: TextInputType.datetime,
+            ),
+            _FormField(
               label: 'Arrived From Country',
-              countries: _countries,
-              selected: _selectedArrivedFromCountry,
-              onChanged: (c) => setState(() => _selectedArrivedFromCountry = c),
+              controller: _arrivedFromCountryCtrl,
             ),
             _FormField(
               label: 'Arrived From City',
               controller: _arrivedFromCityCtrl,
-              keyboardType: TextInputType.streetAddress,
             ),
             _FormField(
               label: 'Arrived From Place',
               controller: _arrivedFromPlaceCtrl,
-              keyboardType: TextInputType.streetAddress,
             ),
             _FormField(
-              label: 'Duration of Stay (Days)',
+              label: 'Duration of Stay (days)',
               controller: _durationOfStayCtrl,
               keyboardType: TextInputType.number,
             ),
@@ -910,18 +1162,59 @@ class _PassportFormPageState extends State<PassportFormPage> {
               label: 'Checkout Date',
               controller: _checkoutDateCtrl,
               onTap: () => _pickDate(
-                initial: _checkoutDate,
+                initial: _checkoutDate ?? DateTime.now(),
                 first: DateTime.now(),
                 last: DateTime.now().add(const Duration(days: 365 * 5)),
                 helpText: 'Checkout Date',
                 onPicked: (d) => setState(() {
                   _checkoutDate = d;
                   _checkoutDateCtrl.text = _fmt(d);
-                  final diff = d.difference(DateTime.now()).inDays;
-                  _durationOfStayCtrl.text = diff.toString();
                 }),
               ),
             ),
+            // Next Destination Type Dropdown
+            _DropdownField(
+              label: 'Next Destination',
+              value: _nextDestinationType,
+              items: const ['Inside India', 'Outside India'],
+              onChanged: (v) => setState(() => _nextDestinationType = v!),
+            ),
+            // Conditional fields for Inside India
+            if (_nextDestinationType == 'Inside India') ...[
+              _StateDropdown(
+                label: 'State',
+                states: _states,
+                selected: _nextDestState,
+                onChanged: (state) {
+                  setState(() => _nextDestState = state);
+                  if (state != null) {
+                    _loadDistrictsForState(state.stateId);
+                  }
+                },
+              ),
+              _DistrictDropdown(
+                label: 'District',
+                districts: _nextDestState != null
+                    ? (_districtsByState[_nextDestState!.stateId] ?? [])
+                    : [],
+                selected: _nextDestDistrict,
+                onChanged: (district) =>
+                    setState(() => _nextDestDistrict = district),
+                enabled: _nextDestState != null,
+              ),
+              _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
+            ],
+            // Conditional fields for Outside India
+            if (_nextDestinationType == 'Outside India') ...[
+              _CountryDropdown(
+                label: 'Country',
+                countries: _countries,
+                selected: _nextDestCountry,
+                onChanged: (c) => setState(() => _nextDestCountry = c),
+              ),
+              _FormField(label: 'City', controller: _nextDestCityCtrl),
+              _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
+            ],
           ],
         ),
       ),
@@ -1015,6 +1308,15 @@ class _PassportFormPageState extends State<PassportFormPage> {
                   itemLabel: (v) => v.visaTypeName,
                   onChanged: (v) => setState(() => _selectedDropVisaType = v),
                 ),
+              // Visa Sub Type dropdown for e-Visa
+              if (_visaType == 'e-Visa' && _visaSubTypes.isNotEmpty)
+                _SearchableDropdown<VisaSubType>(
+                  label: 'Visa Sub Type',
+                  items: _visaSubTypes,
+                  selected: _selectedVisaSubType,
+                  itemLabel: (v) => v.visaSubTypeShort,
+                  onChanged: (v) => setState(() => _selectedVisaSubType = v),
+                ),
               _DateField(
                 label: 'Issuing Date',
                 controller: _visaIssuingDateCtrl,
@@ -1048,27 +1350,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
                 controller: _visaPOICityCtrl,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOtherDetailsCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _SectionHeader(
-              icon: Icons.info_outline,
-              title: 'OTHER DETAILS',
-            ),
-            const SizedBox(height: 20),
-            _FormField(label: 'Room Number', controller: _roomNoCtrl),
           ],
         ),
       ),
@@ -1749,6 +2030,120 @@ class _ImagePreviewSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── State Dropdown ────────────────────────────────────────────────────────────
+class _StateDropdown extends StatelessWidget {
+  final String label;
+  final List<IndianState> states;
+  final IndianState? selected;
+  final void Function(IndianState?) onChanged;
+
+  const _StateDropdown({
+    required this.label,
+    required this.states,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (states.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<IndianState>(
+        value: selected,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: states
+            .map(
+              (e) => DropdownMenuItem<IndianState>(
+                value: e,
+                child: Text(e.stateName),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+        isExpanded: true,
+      ),
+    );
+  }
+}
+
+// ── District Dropdown ─────────────────────────────────────────────────────────
+class _DistrictDropdown extends StatelessWidget {
+  final String label;
+  final List<IndianDistrict> districts;
+  final IndianDistrict? selected;
+  final void Function(IndianDistrict?) onChanged;
+  final bool enabled;
+
+  const _DistrictDropdown({
+    required this.label,
+    required this.districts,
+    required this.selected,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (districts.isEmpty || !enabled) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<IndianDistrict>(
+        value: selected,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: districts
+            .map(
+              (e) => DropdownMenuItem<IndianDistrict>(
+                value: e,
+                child: Text(e.districtName),
+              ),
+            )
+            .toList(),
+        onChanged: enabled ? onChanged : null,
+        isExpanded: true,
       ),
     );
   }

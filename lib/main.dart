@@ -33,8 +33,16 @@ class ZerosnapApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: themeMode,
+            themeMode: ThemeMode.light,
             routerConfig: appRouter,
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.noScaling),
+                child: child!,
+              );
+            },
           );
         },
       ),
