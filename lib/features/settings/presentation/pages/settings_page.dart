@@ -65,6 +65,13 @@ class _SettingsPageState extends State<SettingsPage> {
               await _prefs.saveAccessToken(token);
               await _prefs.saveApiKey(apiKey);
               if (session != null) await _prefs.saveLoginSession(session);
+
+              // Clear Flutter's image cache
+              if (mounted) {
+                imageCache.clear();
+                imageCache.clearLiveImages();
+              }
+
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
