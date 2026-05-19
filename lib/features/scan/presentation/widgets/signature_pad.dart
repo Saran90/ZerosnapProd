@@ -174,6 +174,7 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
       _showSnack('Terms and Conditions URL not available');
       return;
     }
+    debugPrint('Loading Terms and Conditions from: $_termsUrl');
     showDialog(
       context: context,
       builder: (ctx) => _TermsAndConditionsDialog(
@@ -377,12 +378,17 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
+            debugPrint('T&C page started loading: $url');
             setState(() => _isLoading = true);
           },
           onPageFinished: (String url) {
+            debugPrint('T&C page finished loading: $url');
             setState(() => _isLoading = false);
           },
           onWebResourceError: (WebResourceError error) {
+            debugPrint('T&C WebView error: ${error.description}');
+            debugPrint('Error code: ${error.errorCode}');
+            debugPrint('Error type: ${error.errorType}');
             setState(() {
               _isLoading = false;
               _error = error.description;
@@ -391,6 +397,14 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
         ),
       )
       ..loadRequest(Uri.parse(widget.termsUrl));
+  }
+
+  void _retry() {
+    setState(() {
+      _error = null;
+      _isLoading = true;
+    });
+    _initializeWebView();
   }
 
   @override
@@ -458,6 +472,26 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
                               color: Colors.grey[500],
                             ),
                             textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'URL: ${widget.termsUrl}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[400],
+                              fontFamily: 'monospace',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _retry,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ],
                       ),
