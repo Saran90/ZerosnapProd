@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/network/shared_preferences_provider.dart';
@@ -365,11 +366,48 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
   late WebViewController _webViewController;
   bool _isLoading = true;
   String? _error;
+  bool _useWebView = true;
+  String? _htmlContent;
 
   @override
   void initState() {
     super.initState();
-    _initializeWebView();
+    _loadTermsContent();
+  }
+
+  Future<void> _loadTermsContent() async {
+    try {
+      debugPrint('Fetching T&C from: ${widget.termsUrl}');
+      final response = await http
+          .get(Uri.parse(widget.termsUrl))
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw Exception('Request timeout'),
+          );
+
+      if (response.statusCode == 200) {
+        debugPrint('T&C fetched successfully');
+        if (mounted) {
+          setState(() {
+            _htmlContent = response.body;
+            _isLoading = false;
+            _useWebView = false;
+          });
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch T&C via HTTP: $e');
+      debugPrint('Falling back to WebView');
+      if (mounted) {
+        setState(() {
+          _useWebView = true;
+          _isLoading = false;
+        });
+        _initializeWebView();
+      }
+    }
   }
 
   void _initializeWebView() {
@@ -390,10 +428,14 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
             debugPrint('T&C WebView error: ${error.description}');
             debugPrint('Error code: ${error.errorCode}');
             debugPrint('Error type: ${error.errorType}');
-            setState(() {
-              _isLoading = false;
-              _error = error.description;
-            });
+            debugPrint('Failed URL: ${widget.termsUrl}');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _error = error.description;
+                _useWebView = false;
+              });
+            }
           },
         ),
       )
@@ -404,8 +446,10 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
     setState(() {
       _error = null;
       _isLoading = true;
+      _useWebView = true;
+      _htmlContent = null;
     });
-    _initializeWebView();
+    _loadTermsContent();
   }
 
   @override
@@ -444,8 +488,13 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
           ),
           // Content
           Expanded(
-            child: _error != null
-                ? Center(
+            child: _htmlContent != null
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Html(content: _htmlContent!),
+                  )
+                : _error != null && !_useWebView
+                ? SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -466,32 +515,78 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            _error ?? 'Unknown error',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red[200]!),
                             ),
-                            textAlign: TextAlign.center,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Error:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red[700],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _error ?? 'Unknown error',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.red[600],
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'URL: ${widget.termsUrl}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[400],
-                              fontFamily: 'monospace',
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue[200]!),
                             ),
-                            textAlign: TextAlign.center,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'URL:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue[700],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.termsUrl,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.blue[600],
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _retry,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _retry,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                              ),
                             ),
                           ),
                         ],
@@ -600,4 +695,39 @@ class _SignaturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SignaturePainter old) => true;
+}
+
+/// Simple HTML content renderer
+class Html extends StatelessWidget {
+  final String content;
+
+  const Html({required this.content});
+
+  @override
+  Widget build(BuildContext context) {
+    // Simple HTML rendering - just display as text with basic formatting
+    // For production, consider using flutter_html package
+    return SelectableText(
+      _stripHtmlTags(content),
+      style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87),
+    );
+  }
+
+  String _stripHtmlTags(String html) {
+    // Remove common HTML tags
+    String text = html
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .trim();
+
+    // Remove multiple spaces and newlines
+    text = text.replaceAll(RegExp(r'\s+'), ' ');
+
+    return text;
+  }
 }
