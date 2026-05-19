@@ -615,6 +615,10 @@ class _PassportFormPageState extends State<PassportFormPage> {
         _showSnack('Passport has expired');
         return false;
       }
+      if (d != null && d.isBefore(DateTime.now())) {
+        _showSnack('Passport expiry date must be in the future');
+        return false;
+      }
     }
     if (_visaType.isEmpty) {
       _showSnack('Please select a visa type');
@@ -656,6 +660,10 @@ class _PassportFormPageState extends State<PassportFormPage> {
       if (d != null &&
           d.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
         _showSnack('Visa has expired');
+        return false;
+      }
+      if (d != null && d.isBefore(DateTime.now())) {
+        _showSnack('Visa expiry date must be in the future');
         return false;
       }
     }

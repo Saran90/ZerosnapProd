@@ -825,12 +825,51 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     }
   }
 
+  DateTime? _tryParseDate(String text) {
+    try {
+      final parts = text.split('-');
+      if (parts.length == 3) {
+        return DateTime(
+          int.parse(parts[2]),
+          int.parse(parts[1]),
+          int.parse(parts[0]),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  bool _validate() {
+    if (_expiryDateCtrl.text.isNotEmpty &&
+        _expiryDateCtrl.text.toLowerCase() != 'unknown') {
+      final d = _tryParseDate(_expiryDateCtrl.text);
+      if (d != null && d.isBefore(DateTime.now())) {
+        _showSnack('Passport expiry date must be in the future');
+        return false;
+      }
+    }
+    if (widget.showVisaSection &&
+        _visaType.isNotEmpty &&
+        _visaType != 'No Visa') {
+      if (_visaExpiryDateCtrl.text.isNotEmpty &&
+          _visaExpiryDateCtrl.text.toLowerCase() != 'unknown') {
+        final d = _tryParseDate(_visaExpiryDateCtrl.text);
+        if (d != null && d.isBefore(DateTime.now())) {
+          _showSnack('Visa expiry date must be in the future');
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
     if (_frontImagePath.isEmpty) {
       _showSnack('Please capture the passport front image');
       return;
     }
+    if (!_validate()) return;
     setState(() => _isSubmitting = true);
     try {
       final frontBase64 = base64Encode(
