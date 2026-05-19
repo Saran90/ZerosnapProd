@@ -3,10 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 
-/// A full-screen signature capture page.
+/// A full-screen signature capture page with Terms and Conditions acceptance.
 /// Returns a PNG [Uint8List] via [Navigator.pop] when the user confirms,
 /// or null if they cancel.
 class SignaturePadPage extends StatefulWidget {
@@ -21,6 +23,28 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
   List<Offset> _current = [];
   final GlobalKey _repaintKey = GlobalKey();
   bool _isEmpty = true;
+  bool _termsAccepted = false;
+  String? _termsUrl;
+  final _prefs = SharedPreferencesProvider();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTermsUrl();
+  }
+
+  Future<void> _loadTermsUrl() async {
+    try {
+      final baseUrl = await _prefs.getBaseUrl();
+      final termsUrl = '$baseUrl/guest/TermsAndConditions';
+
+      setState(() {
+        _termsUrl = termsUrl;
+      });
+    } catch (e) {
+      debugPrint('Failed to load terms URL: $e');
+    }
+  }
 
   void _onPanStart(DragStartDetails d) {
     _current = [d.localPosition];
@@ -46,6 +70,10 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
 
   Future<void> _confirm() async {
     if (_isEmpty) return;
+    if (!_termsAccepted) {
+      _showSnack('Please accept the Terms and Conditions');
+      return;
+    }
     try {
       final boundary =
           _repaintKey.currentContext!.findRenderObject()!
@@ -128,6 +156,36 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
     }
   }
 
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ),
+    );
+  }
+
+  void _showTermsDialog() {
+    if (_termsUrl == null) {
+      _showSnack('Terms and Conditions URL not available');
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) => _TermsAndConditionsDialog(
+        termsUrl: _termsUrl!,
+        onAccept: () {
+          Navigator.pop(ctx);
+          setState(() => _termsAccepted = true);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -203,6 +261,42 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
               ),
             ),
           ),
+          // Terms and Conditions checkbox
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              border: Border(top: BorderSide(color: Colors.grey[200]!)),
+            ),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: _termsAccepted,
+                  onChanged: (value) {
+                    if (value == true) {
+                      _showTermsDialog();
+                    } else {
+                      setState(() => _termsAccepted = false);
+                    }
+                  },
+                  activeColor: AppColors.primary,
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showTermsDialog,
+                    child: Text(
+                      'I accept the Terms and Conditions',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
@@ -243,6 +337,188 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dialog to display Terms and Conditions from a URL
+class _TermsAndConditionsDialog extends StatefulWidget {
+  final String termsUrl;
+  final VoidCallback onAccept;
+
+  const _TermsAndConditionsDialog({
+    required this.termsUrl,
+    required this.onAccept,
+  });
+
+  @override
+  State<_TermsAndConditionsDialog> createState() =>
+      _TermsAndConditionsDialogState();
+}
+
+class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
+  late WebViewController _webViewController;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeWebView();
+  }
+
+  void _initializeWebView() {
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            setState(() => _isLoading = true);
+          },
+          onPageFinished: (String url) {
+            setState(() => _isLoading = false);
+          },
+          onWebResourceError: (WebResourceError error) {
+            setState(() {
+              _isLoading = false;
+              _error = error.description;
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.termsUrl));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Terms and Conditions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.white, size: 24),
+                ),
+              ],
+            ),
+          ),
+          // Content
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            color: Colors.red[400],
+                            size: 48,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load Terms and Conditions',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _error ?? 'Unknown error',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      WebViewWidget(controller: _webViewController),
+                      if (_isLoading)
+                        Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          // Footer
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Colors.grey[200]!)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Decline'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: widget.onAccept,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      'Accept',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
