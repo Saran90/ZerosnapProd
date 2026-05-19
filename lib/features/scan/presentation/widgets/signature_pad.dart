@@ -363,11 +363,9 @@ class _TermsAndConditionsDialog extends StatefulWidget {
 }
 
 class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
-  late WebViewController _webViewController;
+  WebViewController? _webViewController;
   bool _isLoading = true;
   String? _error;
-  bool _useWebView = true;
-  String? _htmlContent;
 
   @override
   void initState() {
@@ -386,68 +384,65 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
           );
 
       if (response.statusCode == 200) {
-        debugPrint('T&C fetched successfully');
+        debugPrint('T&C fetched successfully, loading into WebView');
         if (mounted) {
-          setState(() {
-            _htmlContent = response.body;
-            _isLoading = false;
-            _useWebView = false;
-          });
+          _initializeWebViewWithHtml(response.body);
         }
       } else {
         throw Exception('HTTP ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Failed to fetch T&C via HTTP: $e');
-      debugPrint('Falling back to WebView');
       if (mounted) {
         setState(() {
-          _useWebView = true;
           _isLoading = false;
+          _error = e.toString();
         });
-        _initializeWebView();
       }
     }
   }
 
-  void _initializeWebView() {
+  void _initializeWebViewWithHtml(String htmlContent) {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36')
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            debugPrint('T&C page started loading: $url');
+            debugPrint('WebView page started loading');
             setState(() => _isLoading = true);
           },
           onPageFinished: (String url) {
-            debugPrint('T&C page finished loading: $url');
+            debugPrint('WebView page finished loading');
             setState(() => _isLoading = false);
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('T&C WebView error: ${error.description}');
-            debugPrint('Error code: ${error.errorCode}');
-            debugPrint('Error type: ${error.errorType}');
-            debugPrint('Failed URL: ${widget.termsUrl}');
-            if (mounted) {
+            debugPrint('WebView error: ${error.description}');
+            // Ignore cleartext errors from external resources
+            if (!error.description.contains('ERR_CLEARTEXT_NOT_PERMITTED')) {
               setState(() {
                 _isLoading = false;
                 _error = error.description;
-                _useWebView = false;
               });
             }
           },
         ),
       )
-      ..loadRequest(Uri.parse(widget.termsUrl));
+      ..loadHtmlString(htmlContent, baseUrl: Uri.parse(widget.termsUrl).origin);
+    
+    setState(() {});
   }
 
   void _retry() {
     setState(() {
       _error = null;
       _isLoading = true;
-      _useWebView = true;
-      _htmlContent = null;
+      _webViewController = null;
+    });
+    _loadTermsContent();
+  }
+    setState(() {
+      _error = null;
+      _isLoading = true;
     });
     _loadTermsContent();
   }
@@ -488,12 +483,7 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
           ),
           // Content
           Expanded(
-            child: _htmlContent != null
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Html(content: _htmlContent!),
-                  )
-                : _error != null && !_useWebView
+            child: _error != null
                 ? SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -595,7 +585,8 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
                   )
                 : Stack(
                     children: [
-                      WebViewWidget(controller: _webViewController),
+                      if (_webViewController != null)
+                        WebViewWidget(controller: _webViewController!),
                       if (_isLoading)
                         Center(
                           child: CircularProgressIndicator(
@@ -695,39 +686,4 @@ class _SignaturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SignaturePainter old) => true;
-}
-
-/// Simple HTML content renderer
-class Html extends StatelessWidget {
-  final String content;
-
-  const Html({required this.content});
-
-  @override
-  Widget build(BuildContext context) {
-    // Simple HTML rendering - just display as text with basic formatting
-    // For production, consider using flutter_html package
-    return SelectableText(
-      _stripHtmlTags(content),
-      style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87),
-    );
-  }
-
-  String _stripHtmlTags(String html) {
-    // Remove common HTML tags
-    String text = html
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .trim();
-
-    // Remove multiple spaces and newlines
-    text = text.replaceAll(RegExp(r'\s+'), ' ');
-
-    return text;
-  }
 }
