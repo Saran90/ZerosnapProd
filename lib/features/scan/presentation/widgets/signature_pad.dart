@@ -12,8 +12,20 @@ import '../../../../core/theme/app_colors.dart';
 /// A full-screen signature capture page with Terms and Conditions acceptance.
 /// Returns a PNG [Uint8List] via [Navigator.pop] when the user confirms,
 /// or null if they cancel.
+///
+/// If [initialSignature] is provided, it will be displayed instead of the drawing pad.
+/// If [initialTermsAccepted] is true, the checkbox will be pre-checked.
 class SignaturePadPage extends StatefulWidget {
-  const SignaturePadPage({super.key});
+  final Uint8List? initialSignature;
+  final bool initialTermsAccepted;
+  final ValueChanged<bool>? onTermsAcceptedChanged;
+
+  const SignaturePadPage({
+    super.key,
+    this.initialSignature,
+    this.initialTermsAccepted = false,
+    this.onTermsAcceptedChanged,
+  });
 
   @override
   State<SignaturePadPage> createState() => _SignaturePadPageState();
@@ -26,12 +38,19 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
   bool _isEmpty = true;
   bool _termsAccepted = false;
   String? _termsUrl;
+  bool _showingImage = false; // Track if we're showing the image
   final _prefs = SharedPreferencesProvider();
 
   @override
   void initState() {
     super.initState();
     _loadTermsUrl();
+    // If there's an initial signature, show the image
+    if (widget.initialSignature != null) {
+      _showingImage = true;
+    }
+    // Initialize terms accepted state from widget
+    _termsAccepted = widget.initialTermsAccepted;
   }
 
   Future<void> _loadTermsUrl() async {
@@ -49,7 +68,10 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
 
   void _onPanStart(DragStartDetails d) {
     _current = [d.localPosition];
-    setState(() => _isEmpty = false);
+    setState(() {
+      _isEmpty = false;
+      _showingImage = false; // Switch to drawing mode
+    });
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
@@ -63,18 +85,27 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
     });
   }
 
-  void _clear() => setState(() {
-    _strokes.clear();
-    _current = [];
-    _isEmpty = true;
-  });
+  void _clear() {
+    if (_showingImage) {
+      // If showing image, transition to drawing pad
+      setState(() {
+        _showingImage = false;
+        _strokes.clear();
+        _current = [];
+        _isEmpty = true;
+      });
+    } else {
+      // If showing drawing pad, just clear the strokes
+      setState(() {
+        _strokes.clear();
+        _current = [];
+        _isEmpty = true;
+      });
+    }
+  }
 
   Future<void> _confirm() async {
-    if (_isEmpty) return;
-    if (!_termsAccepted) {
-      _showSnack('Please accept the Terms and Conditions');
-      return;
-    }
+    if (_isEmpty || !_termsAccepted) return;
     try {
       final boundary =
           _repaintKey.currentContext!.findRenderObject()!
@@ -215,8 +246,9 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Show different title based on state
                   Text(
-                    'Please sign below',
+                    _showingImage ? 'Current Signature' : 'Please sign below',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey[600],
@@ -234,24 +266,44 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: GestureDetector(
-                        onPanStart: _onPanStart,
-                        onPanUpdate: _onPanUpdate,
-                        onPanEnd: _onPanEnd,
-                        child: RepaintBoundary(
-                          key: _repaintKey,
-                          child: CustomPaint(
-                            painter: _SignaturePainter(
-                              strokes: _strokes,
-                              current: _current,
+                      child: _showingImage
+                          ? // Show only the signature image
+                            Container(
+                              color: Colors.white,
+                              child: Image.memory(
+                                widget.initialSignature!,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  debugPrint(
+                                    'Error loading signature image: $error',
+                                  );
+                                  return Center(
+                                    child: Text(
+                                      'Error loading signature: $error',
+                                    ),
+                                  );
+                                },
+                              ),
+                            )
+                          : // Show drawing pad
+                            GestureDetector(
+                              onPanStart: _onPanStart,
+                              onPanUpdate: _onPanUpdate,
+                              onPanEnd: _onPanEnd,
+                              child: RepaintBoundary(
+                                key: _repaintKey,
+                                child: CustomPaint(
+                                  painter: _SignaturePainter(
+                                    strokes: _strokes,
+                                    current: _current,
+                                  ),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
                             ),
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
                     ),
                   ),
-                  if (_isEmpty)
+                  if (!_showingImage && _isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
@@ -263,7 +315,7 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
               ),
             ),
           ),
-          // Terms and Conditions checkbox
+          // Terms and Conditions checkbox (show in both image and drawing modes)
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: BoxDecoration(
@@ -275,11 +327,10 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
                 Checkbox(
                   value: _termsAccepted,
                   onChanged: (value) {
-                    if (value == true) {
-                      _showTermsDialog();
-                    } else {
-                      setState(() => _termsAccepted = false);
-                    }
+                    setState(() {
+                      _termsAccepted = value ?? false;
+                      widget.onTermsAcceptedChanged?.call(_termsAccepted);
+                    });
                   },
                   activeColor: AppColors.primary,
                 ),
@@ -321,7 +372,9 @@ class _SignaturePadPageState extends State<SignaturePadPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _isEmpty ? null : _confirm,
+                      onPressed: (_isEmpty || !_termsAccepted)
+                          ? null
+                          : _confirm,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -428,7 +481,7 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
         ),
       )
       ..loadHtmlString(htmlContent, baseUrl: Uri.parse(widget.termsUrl).origin);
-    
+
     setState(() {});
   }
 
@@ -437,12 +490,6 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
       _error = null;
       _isLoading = true;
       _webViewController = null;
-    });
-    _loadTermsContent();
-  }
-    setState(() {
-      _error = null;
-      _isLoading = true;
     });
     _loadTermsContent();
   }

@@ -64,6 +64,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   // ── Signature ─────────────────────────────────────────────────────────────
   Uint8List? _signatureBytes;
+  bool _termsAndConditionsAccepted = false;
 
   // ── Passport fields ───────────────────────────────────────────────────────
   final _surnameCtrl = TextEditingController();
@@ -419,7 +420,15 @@ class _PassportFormPageState extends State<PassportFormPage> {
   // ── Signature ─────────────────────────────────────────────────────────────
   Future<void> _captureSignature() async {
     final result = await Navigator.of(context).push<Uint8List>(
-      MaterialPageRoute(builder: (_) => const SignaturePadPage()),
+      MaterialPageRoute(
+        builder: (_) => SignaturePadPage(
+          initialSignature: _signatureBytes,
+          initialTermsAccepted: _termsAndConditionsAccepted,
+          onTermsAcceptedChanged: (accepted) {
+            setState(() => _termsAndConditionsAccepted = accepted);
+          },
+        ),
+      ),
     );
     if (result != null) setState(() => _signatureBytes = result);
   }

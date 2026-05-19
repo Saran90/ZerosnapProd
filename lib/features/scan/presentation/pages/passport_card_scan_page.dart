@@ -58,6 +58,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 
   // ── Signature ─────────────────────────────────────────────────────────────
   Uint8List? _signatureBytes;
+  bool _termsAndConditionsAccepted = false;
 
   // Portrait from MRZ scan (base64) — used when no profile image file is captured
   String? _mrzPortraitBase64;
@@ -1615,7 +1616,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         GestureDetector(
           onTap: () async {
             final result = await Navigator.of(context).push<Uint8List>(
-              MaterialPageRoute(builder: (_) => const SignaturePadPage()),
+              MaterialPageRoute(
+                builder: (_) => SignaturePadPage(
+                  initialSignature: _signatureBytes,
+                  initialTermsAccepted: _termsAndConditionsAccepted,
+                  onTermsAcceptedChanged: (accepted) {
+                    setState(() => _termsAndConditionsAccepted = accepted);
+                  },
+                ),
+              ),
             );
             if (result != null) setState(() => _signatureBytes = result);
           },
