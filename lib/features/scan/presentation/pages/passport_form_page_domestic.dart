@@ -18,7 +18,7 @@ class PassportFormPageDomestic extends StatelessWidget {
     return PassportFormPage(
       scannedResult: scannedResult,
       showVisaSection: false,
-      pageTitle: 'Passport Details (Domestic Card)',
+      pageTitle: 'Passport',
     );
   }
 }

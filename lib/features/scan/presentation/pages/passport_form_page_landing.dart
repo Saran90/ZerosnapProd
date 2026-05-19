@@ -18,7 +18,7 @@ class PassportFormPageLanding extends StatelessWidget {
     return PassportFormPage(
       scannedResult: scannedResult,
       showVisaSection: true,
-      pageTitle: 'Passport Details (Landing - MRZ)',
+      pageTitle: 'Passport & VISA',
     );
   }
 }

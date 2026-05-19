@@ -23,7 +23,7 @@ class PassportCardScanPageDomestic extends StatelessWidget {
       initialFrontImagePath: initialFrontImagePath,
       autoOpenCamera: autoOpenCamera,
       showVisaSection: false,
-      pageTitle: 'Passport Details (Domestic Card)',
+      pageTitle: 'Passport',
     );
   }
 }

@@ -23,7 +23,7 @@ class PassportCardScanPageLanding extends StatelessWidget {
       initialFrontImagePath: initialFrontImagePath,
       autoOpenCamera: autoOpenCamera,
       showVisaSection: true,
-      pageTitle: 'Passport Details (Landing - OCR)',
+      pageTitle: 'Passport & VISA',
     );
   }
 }

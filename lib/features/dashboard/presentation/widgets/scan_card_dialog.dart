@@ -47,7 +47,7 @@ class _ScanCardDialog extends StatelessWidget {
 
             // Scan Passport
             _ScanButton(
-              label: 'Scan Passport',
+              label: 'Scan Foreign Passport',
               onTap: () {
                 Navigator.of(context).pop();
                 showPassportSourceDialog(context);

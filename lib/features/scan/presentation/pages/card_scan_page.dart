@@ -12,7 +12,6 @@ import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
-import 'passport_card_scan_page_domestic.dart';
 import 'profile_crop_page.dart';
 
 class CardScanPage extends StatefulWidget {
@@ -137,6 +136,9 @@ class _CardScanPageState extends State<CardScanPage> {
         final profilePath = await cropProfileFromCard(context, croppedFront);
         if (profilePath != null && mounted) {
           setState(() => _profileImagePath = profilePath);
+          // Automatically extract details after profile image is selected
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extract();
         }
       },
     );
@@ -525,13 +527,9 @@ class _CardScanPageState extends State<CardScanPage> {
           '${widget.cardType.label} submitted successfully',
           isError: false,
         );
-        // Navigate to passport page without visa section (domestic card flow)
+        // Navigate back to the previous page (dashboard)
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => const PassportCardScanPageDomestic(),
-          ),
-        );
+        Navigator.of(context).pop();
       } else {
         _snack('Submission failed. Please try again.');
       }
@@ -602,24 +600,68 @@ class _CardScanPageState extends State<CardScanPage> {
         title: Text(widget.cardType.label),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildImagesCard(),
-            const SizedBox(height: 16),
-            if (!_isOtherId) _buildExtractButton(),
-            if (!_isOtherId) const SizedBox(height: 16),
-            _buildDetailsCard(),
-            const SizedBox(height: 16),
-            _buildStayCard(),
-            const SizedBox(height: 16),
-            _buildOtherDetailsCard(),
-            const SizedBox(height: 16),
-            _buildSignatureCard(),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildImagesCard(),
+                const SizedBox(height: 16),
+                _buildDetailsCard(),
+                const SizedBox(height: 16),
+                _buildStayCard(),
+                const SizedBox(height: 16),
+                _buildOtherDetailsCard(),
+                const SizedBox(height: 16),
+                _buildSignatureCard(),
+              ],
+            ),
+          ),
+          // OCR Extraction Loading Overlay
+          if (_isExtracting)
+            Container(
+              color: Colors.black.withValues(alpha: 0.3),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Extracting details...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
@@ -742,34 +784,6 @@ class _CardScanPageState extends State<CardScanPage> {
               fullWidth: true,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExtractButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _isExtracting ? null : _extract,
-        icon: _isExtracting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            : const Icon(Icons.document_scanner_outlined),
-        label: Text(_isExtracting ? 'Extracting...' : 'Extract Details'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary),
-          minimumSize: const Size(0, 52),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
         ),
       ),
     );

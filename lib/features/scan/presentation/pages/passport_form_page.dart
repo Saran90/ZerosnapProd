@@ -777,7 +777,9 @@ class _PassportFormPageState extends State<PassportFormPage> {
       if (!mounted) return;
       if (success) {
         _showSnack('Passport submitted successfully', isError: false);
-        Navigator.of(context).pop(true);
+        // Navigate back to the previous page (dashboard)
+        if (!mounted) return;
+        Navigator.of(context).pop();
       } else {
         _showSnack('Submission failed. Please try again.');
       }
