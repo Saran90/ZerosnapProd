@@ -375,6 +375,7 @@ class _TermsAndConditionsDialogState extends State<_TermsAndConditionsDialog> {
   void _initializeWebView() {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent('Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36')
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
