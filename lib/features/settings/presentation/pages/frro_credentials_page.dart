@@ -122,22 +122,13 @@ class _FrroCredentialsPageState extends State<FrroCredentialsPage> {
     setState(() => _isSyncing = true);
 
     try {
-      final session = await _prefs.getLoginSession();
       final token = await _prefs.getAccessToken();
       final baseUrl = await _prefs.getBaseUrl();
 
-      // Build request body using current stored values as reference
-      final body = <String, dynamic>{
-        'FRRO_Username': session?.frroUsername ?? '',
-        'FRRO_Password': session?.frroPassword ?? '',
-        'FRRO_LastUpdatedDate': DateTime.now().toUtc().toIso8601String(),
-      };
-
       final response =
-          await _api.post(
-                ApiConstants.updateFrroCredentials,
+          await _api.get(
+                ApiConstants.getFrroCredentials,
                 baseUrl: baseUrl,
-                body: body,
                 headers: {'Authorization': 'Bearer $token'},
               )
               as Map<String, dynamic>?;
