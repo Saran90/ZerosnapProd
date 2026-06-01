@@ -29,6 +29,11 @@ class SharedPreferencesProvider {
   static const _keyShowFrroCheckOutInExt = 'showFrroCheckOutInExt';
   static const _keyScanByMrz = 'scanByMrz';
 
+  // ── Logout behaviour ──────────────────────────────────────────────────────
+  /// When true  → logout clears everything (including base URL) → domain entry screen.
+  /// When false → logout keeps base URL → login credentials screen.
+  static const _keyClearUrlOnLogout = 'clear_url_on_logout';
+
   // ── Base URL ──────────────────────────────────────────────────────────────
   Future<void> saveBaseUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
@@ -136,7 +141,20 @@ class SharedPreferencesProvider {
     return prefs.clear();
   }
 
-  // ── FRRO credentials ──────────────────────────────────────────────────────
+  // ── Logout behaviour toggle ───────────────────────────────────────────────
+  /// When true  → logout clears everything (including base URL) → domain entry screen.
+  /// When false → logout keeps base URL → login credentials screen.
+  Future<void> saveClearUrlOnLogout(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyClearUrlOnLogout, value);
+  }
+
+  /// Defaults to true — matches the original behaviour (clear everything).
+  Future<bool> getClearUrlOnLogout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyClearUrlOnLogout) ?? true;
+  }
+
   Future<String> getFrroUsername() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyFrroUsername) ?? '';

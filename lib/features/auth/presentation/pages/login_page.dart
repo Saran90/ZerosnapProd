@@ -33,7 +33,13 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _loadSavedUrl() async {
     final saved = await _prefs.getBaseUrl();
-    if (saved.isNotEmpty) _urlCtrl.text = saved;
+    if (saved.isNotEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _urlCtrl.text = saved;
+        _domainVerified = true; // skip domain step if URL is already stored
+      });
+    }
   }
 
   @override

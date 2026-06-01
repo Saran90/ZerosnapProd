@@ -21,8 +21,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _username = '';
   String _hotelName = '';
   String _baseUrl = '';
-
   bool _loading = true;
+  bool _clearUrlOnLogout = true; // default: clear everything on logout
 
   @override
   void initState() {
@@ -33,11 +33,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _load() async {
     final session = await _prefs.getLoginSession();
     final url = await _prefs.getBaseUrl();
+    final clearUrl = await _prefs.getClearUrlOnLogout();
     if (!mounted) return;
     setState(() {
       _username = session?.username ?? '';
       _hotelName = session?.hotelName ?? '';
       _baseUrl = url;
+      _clearUrlOnLogout = clearUrl;
       _loading = false;
     });
   }
@@ -73,7 +75,6 @@ class _SettingsPageState extends State<SettingsPage> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              // Preserve credentials — only clear temp/cache keys
               final url = _baseUrl;
               final token = await _prefs.getAccessToken();
               final apiKey = await _prefs.getApiKey();
@@ -84,13 +85,11 @@ class _SettingsPageState extends State<SettingsPage> {
               await _prefs.saveApiKey(apiKey);
               if (session != null) await _prefs.saveLoginSession(session);
 
-              // Clear Flutter's image cache
               if (mounted) {
                 imageCache.clear();
                 imageCache.clearLiveImages();
               }
 
-              // Clear native app cache (visible in phone's Storage & Cache settings)
               await _clearNativeCache();
 
               if (mounted) {
@@ -124,7 +123,17 @@ class _SettingsPageState extends State<SettingsPage> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await _prefs.clear();
+              if (_clearUrlOnLogout) {
+                // Clear everything — login page will show domain entry step
+                await _prefs.clear();
+              } else {
+                // Keep base URL — login page will pre-fill it and show credentials step
+                final url = _baseUrl;
+                await _prefs.clear();
+                await _prefs.saveBaseUrl(url);
+                // Restore the toggle preference too so it survives logout
+                await _prefs.saveClearUrlOnLogout(false);
+              }
               if (mounted) context.go(AppRoutes.login);
             },
             child: const Text('Logout', style: TextStyle(color: Colors.red)),
@@ -134,10 +143,11 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundLight,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -149,138 +159,344 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // ── User profile row ──────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 26,
-                        backgroundColor: Color(0xFFE0E0E0),
-                        child: Icon(
-                          Icons.person,
-                          size: 30,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _username.isNotEmpty ? _username : 'User',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF2C3E50),
-                            ),
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Profile card ──────────────────────────────────────────
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderLight),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.primary.withValues(
+                            alpha: 0.12,
                           ),
-                          if (_hotelName.isNotEmpty)
+                          child: const Icon(
+                            Icons.person,
+                            size: 30,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              _hotelName,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[600],
+                              _username.isNotEmpty ? _username : 'User',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2C3E50),
                               ),
                             ),
-                        ],
-                      ),
-                    ],
+                            if (_hotelName.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                _hotelName,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
 
-                const Divider(height: 1),
-
-                // ── Settings list ─────────────────────────────────────────
-                Expanded(
-                  child: ListView(
+                  // ── General section ───────────────────────────────────────
+                  _SectionLabel(label: 'General'),
+                  const SizedBox(height: 8),
+                  _SettingsCard(
                     children: [
                       _SettingsTile(
+                        icon: Icons.link_rounded,
+                        iconColor: AppColors.primary,
                         title: 'HTTPS Address',
                         subtitle: _baseUrl.isNotEmpty ? _baseUrl : 'Not set',
-                        onTap: () {}, // Disabled - no editing allowed
+                        onTap: () {},
+                        showChevron: false,
                       ),
-                      const Divider(height: 1, indent: 16),
+                      _TileDivider(),
                       _SettingsTile(
+                        icon: Icons.settings_rounded,
+                        iconColor: Colors.grey.shade600,
                         title: 'System Settings',
                         subtitle: 'Open device settings',
                         onTap: () => AppSettings.openAppSettings(),
                       ),
-                      const Divider(height: 1, indent: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Account section ───────────────────────────────────────
+                  _SectionLabel(label: 'Account'),
+                  const SizedBox(height: 8),
+                  _SettingsCard(
+                    children: [
                       _SettingsTile(
+                        icon: Icons.lock_outline_rounded,
+                        iconColor: AppColors.primary,
+                        title: 'FRRO Credentials',
+                        subtitle: 'Manage FRRO login details',
+                        onTap: () => context.push('/settings/frro-credentials'),
+                      ),
+                      _TileDivider(),
+                      _SettingsTile(
+                        icon: Icons.cleaning_services_rounded,
+                        iconColor: Colors.orange.shade600,
                         title: 'Clear Cache',
-                        subtitle: 'This will clear all temporary data',
+                        subtitle: 'Remove all temporary data',
                         onTap: _clearCache,
                       ),
-                      const Divider(height: 1, indent: 16),
-
-                      // Logout
-                      ListTile(
-                        onTap: _logout,
-                        leading: const Icon(
-                          Icons.logout_rounded,
-                          color: Colors.red,
-                          size: 22,
-                        ),
-                        title: const Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
+                      _TileDivider(),
+                      _ToggleTile(
+                        icon: Icons.link_off_rounded,
+                        iconColor: Colors.purple.shade400,
+                        title: 'Reset URL on Logout',
+                        subtitle: _clearUrlOnLogout
+                            ? 'Logout will return to domain entry'
+                            : 'Logout will return to login screen',
+                        value: _clearUrlOnLogout,
+                        onChanged: (val) async {
+                          setState(() => _clearUrlOnLogout = val);
+                          await _prefs.saveClearUrlOnLogout(val);
+                        },
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 16),
 
-                // ── Version ───────────────────────────────────────────────
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16, top: 8),
+                  // ── Logout ────────────────────────────────────────────────
+                  _SettingsCard(
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.logout_rounded,
+                        iconColor: Colors.red,
+                        title: 'Logout',
+                        subtitle: 'Sign out of your account',
+                        titleColor: Colors.red,
+                        onTap: _logout,
+                        showChevron: false,
+                      ),
+                    ],
+                  ),
+
+                  // ── Version ───────────────────────────────────────────────
+                  const SizedBox(height: 24),
+                  Center(
                     child: Text(
                       'version 1.0',
                       style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
     );
   }
 }
 
-// ── Reusable settings tile ────────────────────────────────────────────────────
+// ── Section label ─────────────────────────────────────────────────────────────
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey[500],
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Card wrapper that groups tiles ────────────────────────────────────────────
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  const _SettingsCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+// ── Thin divider between tiles inside a card ──────────────────────────────────
+class _TileDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, indent: 56, endIndent: 0);
+  }
+}
+
+// ── Individual settings tile ──────────────────────────────────────────────────
 class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Color? titleColor;
+  final bool showChevron;
 
   const _SettingsTile({
+    required this.icon,
+    required this.iconColor,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.titleColor,
+    this.showChevron = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return InkWell(
       onTap: onTap,
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF2C3E50),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // Icon badge
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 14),
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: titleColor ?? const Color(0xFF2C3E50),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (showChevron)
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.grey[400],
+                size: 20,
+              ),
+          ],
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+    );
+  }
+}
+
+// ── Toggle settings tile ──────────────────────────────────────────────────────
+class _ToggleTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ToggleTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          // Icon badge
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: iconColor),
+          ),
+          const SizedBox(width: 14),
+          // Text
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
+          ),
+        ],
       ),
     );
   }

@@ -49,4 +49,8 @@ class ApiConstants {
 
   // Duplicate guest check
   static const String checkDuplicateGuest = '/api/CheckDupilcateGuest';
+
+  // FRRO credentials sync
+  static const String updateFrroCredentials =
+      '/api/UpdateFRROCredentialsMobile';
 }

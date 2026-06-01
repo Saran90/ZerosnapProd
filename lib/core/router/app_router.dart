@@ -7,6 +7,8 @@ import '../../features/guest_management/presentation/pages/guest_detail_page.dar
 import '../../features/guest_management/presentation/pages/add_guest_page.dart';
 import '../../features/frro/presentation/pages/frro_list_page.dart';
 import '../../features/frro/presentation/pages/frro_form_page.dart';
+import '../../features/settings/presentation/pages/settings_page.dart';
+import '../../features/settings/presentation/pages/frro_credentials_page.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -19,6 +21,8 @@ class AppRoutes {
   static const String guestDetail = '/guests/:id';
   static const String frroList = '/frro';
   static const String frroForm = '/frro/form';
+  static const String settings = '/settings';
+  static const String frroCredentials = '/settings/frro-credentials';
 }
 
 final appRouter = GoRouter(
@@ -57,6 +61,16 @@ final appRouter = GoRouter(
         GoRoute(
           path: 'form',
           builder: (context, state) => const FrroFormPage(),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      builder: (context, state) => const SettingsPage(),
+      routes: [
+        GoRoute(
+          path: 'frro-credentials',
+          builder: (context, state) => const FrroCredentialsPage(),
         ),
       ],
     ),
