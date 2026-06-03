@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/version_text.dart';
 import '../../../frro/domain/entities/guest.dart';
 import '../../../frro/presentation/bloc/guest_list_bloc.dart';
 import '../../../frro/presentation/bloc/guest_list_event.dart';
@@ -320,8 +321,7 @@ class _GuestListPageState extends State<_GuestListPageContent>
             top: false,
             child: Padding(
               padding: const EdgeInsets.only(bottom: 12, top: 4),
-              child: Text(
-                'version 1.0',
+              child: VersionText(
                 style: TextStyle(fontSize: 12, color: Colors.grey[500]),
               ),
             ),

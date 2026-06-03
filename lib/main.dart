@@ -5,10 +5,15 @@ import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/cubit/theme_cubit.dart';
+import 'core/utils/app_version.dart';
 import 'features/frro/presentation/bloc/guest_list_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize app version info
+  await AppVersion.initialize();
+
   Mrzflutterplugin.registerWithLicenceKey(
     '328833D4810B7B5E68109F90F66321CF4E7D4AB588DB3E3331CAE99326E0852B013A7A2E837A9B494D4295783E1804B3',
   );

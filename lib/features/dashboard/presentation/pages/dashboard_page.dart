@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/version_text.dart';
 import '../widgets/scan_card_dialog.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 
@@ -106,8 +107,7 @@ class DashboardPage extends StatelessWidget {
           // Version
           Padding(
             padding: EdgeInsets.only(bottom: bottomPad + 16, top: 8),
-            child: const Text(
-              'version 1.0',
+            child: const VersionText(
               style: TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
             ),
           ),

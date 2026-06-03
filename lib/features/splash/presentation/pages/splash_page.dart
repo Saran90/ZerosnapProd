@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/version_text.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -76,16 +77,26 @@ class _SplashPageState extends State<SplashPage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _useImageAssets
-                        ? Image.asset(
-                            'assets/icons/logo_z.png',
-                            width: 72,
-                            fit: BoxFit.contain,
-                          )
-                        : const _OzoLogoWidget(),
-                    const SizedBox(height: 6),
+                    // Powered by text
                     const Text(
-                      'version 1.0',
+                      'Powered by',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF757575),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 0),
+                    // Intellilabs logo
+                    Image.asset(
+                      'assets/images/intellilabs_logo.png',
+                      width: 180,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 4),
+                    // Version text
+                    const VersionText(
                       style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFF9E9E9E),
@@ -199,89 +210,6 @@ class _ZIconPainter extends CustomPainter {
     // ── Blue bottom-right semicircle ───────────────────────────────
     final bottomArcRect = Rect.fromLTWH(w * 0.30, h * 0.68, w * 0.62, h * 0.28);
     canvas.drawArc(bottomArcRect, 0, 3.14159, false, bluePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OZO infinity logo: two loops with a Z-shaped connector, blue gradient
-// ─────────────────────────────────────────────────────────────────────────────
-class _OzoLogoWidget extends StatelessWidget {
-  const _OzoLogoWidget();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 80,
-      height: 40,
-      child: CustomPaint(painter: _OzoPainter()),
-    );
-  }
-}
-
-class _OzoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    final gradient = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: [const Color(0xFF3B5BDB), const Color(0xFF74C0FC)],
-    ).createShader(Rect.fromLTWH(0, 0, w, h));
-
-    final paint = Paint()
-      ..shader = gradient
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    // Left loop (C shape opening right)
-    final leftLoop = Path()
-      ..moveTo(w * 0.32, h * 0.18)
-      ..cubicTo(w * 0.10, h * 0.05, w * -0.02, h * 0.35, w * 0.05, h * 0.55)
-      ..cubicTo(w * 0.10, h * 0.72, w * 0.28, h * 0.82, w * 0.38, h * 0.72)
-      ..cubicTo(w * 0.46, h * 0.62, w * 0.44, h * 0.48, w * 0.36, h * 0.42)
-      ..cubicTo(w * 0.28, h * 0.36, w * 0.20, h * 0.40, w * 0.20, h * 0.50);
-    canvas.drawPath(leftLoop, paint);
-
-    // Center Z connector
-    final zPath = Path()
-      ..moveTo(w * 0.36, h * 0.22)
-      ..lineTo(w * 0.62, h * 0.22)
-      ..lineTo(w * 0.36, h * 0.78)
-      ..lineTo(w * 0.62, h * 0.78);
-    canvas.drawPath(zPath, paint);
-
-    // Right loop (D shape opening left)
-    final rightLoop = Path()
-      ..moveTo(w * 0.62, h * 0.28)
-      ..cubicTo(w * 0.72, h * 0.18, w * 0.90, h * 0.18, w * 0.96, h * 0.38)
-      ..cubicTo(w * 1.02, h * 0.58, w * 0.90, h * 0.80, w * 0.72, h * 0.82)
-      ..cubicTo(w * 0.58, h * 0.84, w * 0.52, h * 0.68, w * 0.58, h * 0.58)
-      ..cubicTo(w * 0.62, h * 0.50, w * 0.72, h * 0.48, w * 0.76, h * 0.52);
-    canvas.drawPath(rightLoop, paint);
-
-    // TM superscript
-    final tmPaint = Paint()
-      ..color = const Color(0xFF3B5BDB)
-      ..style = PaintingStyle.fill;
-    final tmStyle = const TextStyle(
-      fontSize: 7,
-      fontWeight: FontWeight.w700,
-      color: Color(0xFF3B5BDB),
-    );
-    final tmSpan = TextSpan(text: '™', style: tmStyle);
-    final tmPainter = TextPainter(
-      text: tmSpan,
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tmPainter.paint(canvas, Offset(w - 10, 0));
-    tmPaint.toString(); // suppress unused warning
   }
 
   @override

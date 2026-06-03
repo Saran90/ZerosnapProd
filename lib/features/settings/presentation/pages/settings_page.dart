@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/version_text.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -296,8 +297,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   // ── Version ───────────────────────────────────────────────
                   const SizedBox(height: 24),
                   Center(
-                    child: Text(
-                      'version 1.0',
+                    child: VersionText(
                       style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     ),
                   ),
