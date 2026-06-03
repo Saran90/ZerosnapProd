@@ -136,12 +136,138 @@ class _CardScanPageState extends State<CardScanPage> {
         final profilePath = await cropProfileFromCard(context, croppedFront);
         if (profilePath != null && mounted) {
           setState(() => _profileImagePath = profilePath);
-          // Automatically extract details after profile image is selected
+
+          // Ask user if they want to capture back image
+          await _offerBackImageCapture();
+        }
+      },
+    );
+  }
+
+  /// Ask user if they want to capture the back image after profile crop
+  Future<void> _offerBackImageCapture() async {
+    if (!mounted) return;
+    final captureBack = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Capture Back Image?',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'Do you want to capture the back image of the card? This can improve extraction accuracy.',
+          style: TextStyle(fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey[700],
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'No',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Yes',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (captureBack == true && mounted) {
+      // Capture back image
+      await _captureBackImageAndExtract();
+    } else {
+      // User said no, extract with only front image
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _extract();
+    }
+  }
+
+  /// Capture back image and then automatically call OCR
+  Future<void> _captureBackImageAndExtract() async {
+    showImageSourceDialog(
+      context,
+      title: 'Back Image',
+      onPicked: (source) async {
+        final file = await _picker.pickImage(source: source, imageQuality: 80);
+        if (file == null) {
+          // User cancelled, extract with only front
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extract();
+          return;
+        }
+        final cropped = await cropImage(context, file.path);
+        if (cropped != null && mounted) {
+          setState(() => _backImagePath = cropped);
+          // Automatically extract details after back image is captured
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extract();
+        } else {
+          // Crop cancelled, extract with only front
           await Future.delayed(const Duration(milliseconds: 500));
           await _extract();
         }
       },
     );
+  }
+
+  /// Handle tap on front image - allow updating and re-extract OCR
+  void _onFrontImageTap() {
+    if (_frontImagePath.isEmpty) {
+      _showFrontImageSheet();
+    } else {
+      // If front image already exists, allow user to update it
+      showImageSourceDialog(
+        context,
+        title: 'Update Front Image',
+        onPicked: (source) async {
+          final file = await _picker.pickImage(
+            source: source,
+            imageQuality: 80,
+          );
+          if (file == null) return;
+          final cropped = await cropImage(context, file.path);
+          if (cropped != null && mounted) {
+            setState(() => _frontImagePath = cropped);
+            // Re-extract with updated front image (and existing back if available)
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _extract();
+          }
+        },
+      );
+    }
   }
 
   void _showProfileImageSheet() {
@@ -166,8 +292,12 @@ class _CardScanPageState extends State<CardScanPage> {
         final file = await _picker.pickImage(source: source, imageQuality: 80);
         if (file == null) return;
         final cropped = await cropImage(context, file.path);
-        if (cropped != null && mounted)
+        if (cropped != null && mounted) {
           setState(() => _backImagePath = cropped);
+          // Re-extract with updated back image
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extract();
+        }
       },
     );
   }
@@ -761,7 +891,7 @@ class _CardScanPageState extends State<CardScanPage> {
                   child: _ImageTile(
                     label: 'Front',
                     imagePath: _frontImagePath,
-                    onTap: _showFrontImageSheet,
+                    onTap: _onFrontImageTap,
                   ),
                 ),
                 const SizedBox(width: 12),

@@ -172,10 +172,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _profileImagePath = widget.initialFrontImagePath!;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await _offerProfileCrop(widget.initialFrontImagePath!);
-        // Automatically extract details after profile crop dialog completes
+        // Ask user if they want to capture back image
         if (mounted) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extractFromImage();
+          await _offerBackImageCapture();
         }
       });
     }
@@ -430,7 +429,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   /// Directly opens the camera for the front image — no source chooser.
-  /// Directly opens the camera for the front image — no source chooser.
   /// Used when the user already selected "Camera" in the dialog.
   /// Automatically calls OCR API after image is captured.
   Future<void> _autoCaptureFront() async {
@@ -441,10 +439,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     setState(() => _frontImagePath = path);
     await _offerProfileCrop(path);
     if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
-    // Automatically extract details after image capture
+
+    // Ask user if they want to capture back image
     if (mounted) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _extractFromImage();
+      await _offerBackImageCapture();
     }
   }
 
@@ -459,10 +457,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         setState(() => _frontImagePath = path);
         await _offerProfileCrop(path);
         if (_profileImagePath.isEmpty) setState(() => _profileImagePath = path);
-        // Automatically extract details after image is selected
+
+        // Ask user if they want to capture back image
         if (mounted) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extractFromImage();
+          await _offerBackImageCapture();
         }
       },
     );
@@ -477,6 +475,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         final ok = await _showImagePreviewSheet(path, 'Passport Back');
         if (!ok) return;
         setState(() => _backImagePath = path);
+
+        // Re-extract with updated back image
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _extractPassportWithBackImage();
       },
     );
   }
@@ -494,7 +496,213 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     );
   }
 
+  /// Handle tap on front image - allow updating and re-extract OCR
+  void _onFrontImageTap() {
+    if (_frontImagePath.isEmpty) {
+      _pickFrontImage();
+    } else {
+      // If front image already exists, allow user to update it
+      _showImageSourceSheet(
+        title: 'Update Passport Front',
+        onPicked: (source) async {
+          final path = await _captureImage(source);
+          if (path == null || !mounted) return;
+          final ok = await _showImagePreviewSheet(path, 'Passport Front');
+          if (!ok) return;
+          setState(() => _frontImagePath = path);
+          // Re-extract with updated front image (and existing back if available)
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (_backImagePath.isNotEmpty) {
+            await _extractPassportWithBackImage();
+          } else {
+            await _extractFromImage();
+          }
+        },
+      );
+    }
+  }
+
   // ── OCR Extract ───────────────────────────────────────────────────────────
+  /// Ask user if they want to capture the back image after profile crop
+  Future<void> _offerBackImageCapture() async {
+    if (!mounted) return;
+    final captureBack = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Capture Back Image?',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'Do you want to capture the back image of the passport? This can improve extraction accuracy.',
+          style: TextStyle(fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey[700],
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'No',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Yes',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (captureBack == true && mounted) {
+      // Capture back image
+      await _captureBackImageAndExtract();
+    } else {
+      // User said no, extract with only front image
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _extractFromImage();
+    }
+  }
+
+  /// Capture back image and then automatically call OCR
+  Future<void> _captureBackImageAndExtract() async {
+    _showImageSourceSheet(
+      title: 'Passport Back / Last Page',
+      onPicked: (source) async {
+        final path = await _captureImage(source);
+        if (path == null || !mounted) {
+          // User cancelled, extract with only front
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extractFromImage();
+          return;
+        }
+        final ok = await _showImagePreviewSheet(path, 'Passport Back');
+        if (!ok || !mounted) {
+          // Preview rejected, extract with only front
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _extractFromImage();
+          return;
+        }
+        setState(() => _backImagePath = path);
+        // Automatically extract details after back image is captured
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _extractPassportWithBackImage();
+      },
+    );
+  }
+
+  /// Extract passport data including back image if available
+  Future<void> _extractPassportWithBackImage() async {
+    if (_frontImagePath.isEmpty) {
+      _showSnack('Please capture the passport front image first');
+      return;
+    }
+    setState(() => _isExtractingOcr = true);
+    try {
+      final frontBase64 = base64Encode(
+        await File(_frontImagePath).readAsBytes(),
+      );
+
+      // Include back image if available
+      // ignore: unused_local_variable
+      String? backBase64;
+      if (_backImagePath.isNotEmpty) {
+        backBase64 = base64Encode(await File(_backImagePath).readAsBytes());
+      }
+
+      // Note: Current API only accepts front image, but we're preparing for future enhancement
+      // For now, we'll still call with just front, but the structure is ready for back image
+      final response = await _repo.extractPassport(
+        frontBase64: frontBase64,
+        // backBase64: backBase64, // Uncomment when API supports back image
+      );
+
+      if (!mounted) return;
+
+      if (response == null) {
+        _showSnack('Could not extract details. Please fill in manually.');
+        return;
+      }
+
+      // Check HTTP code — 200 means success
+      final code = response['code'] as int? ?? response['Code'] as int?;
+      if (code != null && code != 200) {
+        _showSnack(
+          response['message'] as String? ??
+              response['Message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+        return;
+      }
+
+      // The actual passport data is in response['data'] with Guest_* keys
+      final nested = response['data'] ?? response['Data'];
+      if (nested is! Map<String, dynamic>) {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+        return;
+      }
+
+      _fillFromOcr(nested);
+
+      // Check if anything was actually populated
+      final anyFilled =
+          _docNoCtrl.text.isNotEmpty ||
+          _surnameCtrl.text.isNotEmpty ||
+          _givenNamesCtrl.text.isNotEmpty;
+
+      if (anyFilled) {
+        _showSnack('Details extracted successfully', isError: false);
+        await checkAndHandleDuplicate(
+          context,
+          documentNo: _docNoCtrl.text,
+          cardType: GuestCardType.indianPassport,
+        );
+      } else {
+        _showSnack(
+          response['message'] as String? ??
+              'Could not extract details. Please fill in manually.',
+        );
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Extraction failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExtractingOcr = false);
+    }
+  }
+
   Future<void> _extractFromImage() async {
     if (_frontImagePath.isEmpty) {
       _showSnack('Please capture the passport front image first');
@@ -1114,7 +1322,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
               child: _ImageTile(
                 label: 'Front Page',
                 imagePath: _frontImagePath,
-                onTap: _pickFrontImage,
+                onTap: _onFrontImageTap,
                 icon: Icons.chrome_reader_mode_outlined,
               ),
             ),

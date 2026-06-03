@@ -223,7 +223,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       _SettingsTile(
                         icon: Icons.link_rounded,
                         iconColor: AppColors.primary,
-                        title: 'HTTPS Address',
+                        title: 'Domain URL',
                         subtitle: _baseUrl.isNotEmpty ? _baseUrl : 'Not set',
                         onTap: () {},
                         showChevron: false,

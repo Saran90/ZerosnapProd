@@ -668,70 +668,79 @@ class _FrroListPageState extends State<_FrroListPageContent> {
           );
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go(AppRoutes.guestList),
-          ),
-          title: const Text(
-            'FRRO Guest List',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) {
+            // Handle hardware back button - navigate to guest list
+            context.go(AppRoutes.guestList);
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.go(AppRoutes.guestList),
             ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            WebViewWidget(controller: _webCtrl),
-            if (_loading)
-              const LinearProgressIndicator(
-                backgroundColor: Colors.transparent,
-                color: AppColors.primary,
+            title: const Text(
+              'FRRO Guest List',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
               ),
-          ],
+            ],
+          ),
+          body: Stack(
+            children: [
+              WebViewWidget(controller: _webCtrl),
+              if (_loading)
+                const LinearProgressIndicator(
+                  backgroundColor: Colors.transparent,
+                  color: AppColors.primary,
+                ),
+            ],
+          ),
+          floatingActionButton: BlocBuilder<GuestListBloc, GuestListState>(
+            builder: (context, state) {
+              // Only show guest list button
+              return FloatingActionButton.small(
+                onPressed: () {
+                  if (state is GuestListLoaded) {
+                    _showGuestSheet(state.guests);
+                  } else if (state is GuestListError) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(state.message)));
+                  }
+                },
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 4,
+                tooltip: 'Guest list',
+                child: state is GuestListLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.people_outline_rounded, size: 22),
+              );
+            },
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         ),
-        floatingActionButton: BlocBuilder<GuestListBloc, GuestListState>(
-          builder: (context, state) {
-            // Only show guest list button
-            return FloatingActionButton.small(
-              onPressed: () {
-                if (state is GuestListLoaded) {
-                  _showGuestSheet(state.guests);
-                } else if (state is GuestListError) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(state.message)));
-                }
-              },
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              tooltip: 'Guest list',
-              child: state is GuestListLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.people_outline_rounded, size: 22),
-            );
-          },
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
     );
   }
