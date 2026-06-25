@@ -795,7 +795,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           pick(['Guest_NationalityTxt', 'Guest_Nationality', 'nationality']) ??
           '';
       _issuingCountryCtrl.text =
-          pick(['Guest_CountryofIssue', 'country', 'countryCode']) ?? '';
+          pick(['Guest_Country', 'Guest_CountryofIssue', 'countryCode']) ?? '';
+      debugPrint('Issuing COuntry: ${_issuingCountryCtrl.text}');
       _dobCtrl.text = pick(['Guest_DOB', 'date_of_birth', 'dateOfBirth']) ?? '';
       _expiryDateCtrl.text =
           pick(['Guest_ExpiryDate', 'expiry_date', 'expiryDate']) ?? '';
@@ -813,6 +814,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _addressCtrl.text = pick(['Guest_Address', 'address']) ?? '';
       _emailCtrl.text = pick(['Guest_Email', 'email']) ?? '';
       _phoneCtrl.text = pick(['Guest_PhoneNo', 'phone']) ?? '';
+
+      // Arrived From Country — filled from the 'country' key in the API response
+      final arrivedCountry =
+          pick(['Guest_Country', 'Guest_CountryofIssue', 'countryCode']) ??
+          _issuingCountryCtrl.text;
+      if (arrivedCountry.isNotEmpty) {
+        _arrivedFromCountryCtrl.text = arrivedCountry;
+      }
 
       // API returns "Female" / "Male" — map to M / F
       final genderRaw =
@@ -878,6 +887,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _visaExpiryDateCtrl.text = result.expiryDate ?? '';
       if (result.optionals != null && result.optionals!.isNotEmpty) {
         _visaPOICityCtrl.text = result.optionals!;
+        // Arrived From City and Place — pre-fill from visa's POI city
+        _arrivedFromCityCtrl.text = result.optionals!;
+        _arrivedFromPlaceCtrl.text = result.optionals!;
       }
       _selectedVisaCountry = _countries
           .where((c) => c.code == result.issuingCountry)
@@ -1005,8 +1017,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           pick(['Guest_VisaDateofIssue', 'issue_date', 'issueDate']) ?? '';
       _visaExpiryDateCtrl.text =
           pick(['Guest_VisaValidTill', 'expiry_date', 'expiryDate']) ?? '';
-      _visaPOICityCtrl.text =
-          pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
+      final poiCity = pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
+      _visaPOICityCtrl.text = poiCity;
+
+      // Arrived From City and Place — pre-fill from visa's place of issue city
+      if (poiCity.isNotEmpty) {
+        _arrivedFromCityCtrl.text = poiCity;
+        _arrivedFromPlaceCtrl.text = poiCity;
+      }
     });
   }
 
@@ -1142,7 +1160,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
           'guest_VisaValidTill': _visaExpiryDateCtrl.text,
           'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
-          'guest_VisaSubType': _selectedVisaSubType?.visaSubTypeId ?? '',
+          'VisaSubTypeId': _selectedVisaSubType?.visaSubTypeId ?? '',
           'VisaIDCardType': _visaTypeInt(),
         });
 

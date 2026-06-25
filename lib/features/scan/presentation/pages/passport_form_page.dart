@@ -210,6 +210,11 @@ class _PassportFormPageState extends State<PassportFormPage> {
                     c.name.toLowerCase() == (r.nationality ?? '').toLowerCase(),
               )
               .firstOrNull;
+
+          // Arrived From Country — pre-fill from passport's issuing country
+          if (_selectedIssuingCountry != null) {
+            _arrivedFromCountryCtrl.text = _selectedIssuingCountry!.name;
+          }
         }
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
@@ -496,6 +501,9 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _visaExpiryDateCtrl.text = result.expiryDate ?? '';
       if (result.optionals != null && result.optionals!.isNotEmpty) {
         _visaPOICityCtrl.text = result.optionals!;
+        // Arrived From City and Place — pre-fill from visa's POI city
+        _arrivedFromCityCtrl.text = result.optionals!;
+        _arrivedFromPlaceCtrl.text = result.optionals!;
       }
       _selectedVisaCountry = _countries
           .where((c) => c.code == result.issuingCountry)
@@ -586,8 +594,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
           pick(['Guest_VisaDateofIssue', 'issue_date', 'issueDate']) ?? '';
       _visaExpiryDateCtrl.text =
           pick(['Guest_VisaValidTill', 'expiry_date', 'expiryDate']) ?? '';
-      _visaPOICityCtrl.text =
-          pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
+      final poiCity = pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
+      _visaPOICityCtrl.text = poiCity;
+
+      // Arrived From City and Place — pre-fill from visa's place of issue city
+      if (poiCity.isNotEmpty) {
+        _arrivedFromCityCtrl.text = poiCity;
+        _arrivedFromPlaceCtrl.text = poiCity;
+      }
     });
   }
 
@@ -758,7 +772,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
           'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
           'guest_VisaValidTill': _visaExpiryDateCtrl.text,
           'guest_VisaType': _selectedDropVisaType?.visaId ?? '',
-          'guest_VisaSubType': _selectedVisaSubType?.visaSubTypeId ?? '',
+          'VisaSubTypeId': _selectedVisaSubType?.visaSubTypeId ?? '',
           'VisaIDCardType': _visaTypeInt(),
         });
 

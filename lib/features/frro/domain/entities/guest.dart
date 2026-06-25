@@ -55,6 +55,8 @@ class Guest extends Equatable {
   final String arrivedFromPlace;
   final String nextDestination;
   final String specialCategory;
+  final String visaSubTypeId;
+  final String visaSubTypeName;
   final Branch branch;
 
   const Guest({
@@ -97,6 +99,8 @@ class Guest extends Equatable {
     required this.arrivedFromPlace,
     required this.nextDestination,
     required this.specialCategory,
+    required this.visaSubTypeId,
+    required this.visaSubTypeName,
     this.branch = Branch.empty,
   });
 
@@ -170,6 +174,8 @@ class Guest extends Equatable {
     arrivedFromPlace,
     nextDestination,
     specialCategory,
+    visaSubTypeId,
+    visaSubTypeName,
     branch,
   ];
 }

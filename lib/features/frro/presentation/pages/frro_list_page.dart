@@ -320,7 +320,30 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       selectFirst(['#visa_issue_country','#applicant_visaplacecountry','#applicant_visacountry','[name="visa_issue_country"]','[name="applicant_visaplacecountry"]','[name="applicant_visacountry"]'], '${e(g.visaPOICountry)}');
       fillFirst(['#applicant_visadoissue','[name="applicant_visadoissue"]'], '${e(g.visaDateOfIssue)}');
       fillFirst(['#applicant_visavalidtill','[name="applicant_visavalidtill"]'], '${e(g.visaValidTill)}');
-      ${g.specialCategory.isNotEmpty ? "selectFirst(['#applicant_visa_subtype_code','#applicant_visasubtype','[name=\"applicant_visa_subtype_code\"]','[name=\"applicant_visasubtype\"]'], '${e(g.specialCategory)}');" : ''}
+      // Visa sub type — wait for options to load after visa type change, then set by VisaSubTypeId
+      ${g.visaSubTypeId.isNotEmpty ? """
+      (function() {
+        var targetId = '${e(g.visaSubTypeId)}';
+        console.log('VisaSubTypeId to set: ' + targetId);
+        var selectors = '#applicant_visa_subtype_code,#applicant_visasubtype,[name="applicant_visa_subtype_code"],[name="applicant_visasubtype"]';
+        var attempts = 0;
+        var maxAttempts = 20; // poll for up to 2 seconds (20 x 100ms)
+        function trySet() {
+          attempts++;
+          var el = document.querySelector(selectors);
+          if (el && el.tagName === 'SELECT' && el.options.length > 1) {
+            el.value = targetId;
+            el.dispatchEvent(new Event('change', {bubbles:true}));
+            console.log('✅ Visa subtype set after ' + attempts + ' attempt(s): ' + targetId);
+          } else if (attempts < maxAttempts) {
+            setTimeout(trySet, 100);
+          } else {
+            console.log('⚠️ Visa subtype dropdown not ready after ' + attempts + ' attempts. ID: ' + targetId);
+          }
+        }
+        setTimeout(trySet, 300); // initial delay to let visa type change trigger options load
+      })();
+      """ : ''}
 
       // SECTION 4: ARRIVAL IN INDIA
       // Date of arrival in India (real FRRO field: applicant_doarrivalindia)

@@ -43,6 +43,8 @@ class GuestModel extends Guest {
     required super.arrivedFromPlace,
     required super.nextDestination,
     required super.specialCategory,
+    required super.visaSubTypeId,
+    required super.visaSubTypeName,
     super.branch,
   });
 
@@ -87,6 +89,8 @@ class GuestModel extends Guest {
       arrivedFromPlace: json['ArrivedFromPlace'] ?? '',
       nextDestination: json['NextDestination'] ?? '',
       specialCategory: json['SpecialCategory'] ?? '',
+      visaSubTypeId: json['VisaSubTypeId']?.toString() ?? '',
+      visaSubTypeName: json['VisaSubTypeName'] ?? '',
       branch: _parseBranch(json['Branch']),
     );
   }
@@ -150,6 +154,8 @@ class GuestModel extends Guest {
       'ArrivedFromPlace': arrivedFromPlace,
       'NextDestination': nextDestination,
       'SpecialCategory': specialCategory,
+      'VisaSubTypeId': visaSubTypeId,
+      'VisaSubTypeName': visaSubTypeName,
     };
   }
 }
