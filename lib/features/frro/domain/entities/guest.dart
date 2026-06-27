@@ -54,6 +54,12 @@ class Guest extends Equatable {
   final String arrivedFromCity;
   final String arrivedFromPlace;
   final String nextDestination;
+  final String nextDestinationInState;
+  final String nextDestinationInDistrict;
+  final String nextDestinationInPlace;
+  final String nextDestinationOutCountry;
+  final String nextDestinationOutCity;
+  final String nextDestinationOutPlace;
   final String specialCategory;
   final String visaSubTypeId;
   final String visaSubTypeName;
@@ -98,6 +104,12 @@ class Guest extends Equatable {
     required this.arrivedFromCity,
     required this.arrivedFromPlace,
     required this.nextDestination,
+    required this.nextDestinationInState,
+    required this.nextDestinationInDistrict,
+    required this.nextDestinationInPlace,
+    required this.nextDestinationOutCountry,
+    required this.nextDestinationOutCity,
+    required this.nextDestinationOutPlace,
     required this.specialCategory,
     required this.visaSubTypeId,
     required this.visaSubTypeName,
@@ -173,6 +185,12 @@ class Guest extends Equatable {
     arrivedFromCity,
     arrivedFromPlace,
     nextDestination,
+    nextDestinationInState,
+    nextDestinationInDistrict,
+    nextDestinationInPlace,
+    nextDestinationOutCountry,
+    nextDestinationOutCity,
+    nextDestinationOutPlace,
     specialCategory,
     visaSubTypeId,
     visaSubTypeName,

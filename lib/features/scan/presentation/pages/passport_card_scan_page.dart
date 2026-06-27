@@ -78,9 +78,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   List<VisaType> _visaDropTypes = [];
   List<IndianState> _states = [];
   List<VisaSubType> _visaSubTypes = [];
+  List<Purpose> _purposes = [];
   MrzCountry? _selectedVisaCountry;
   VisaType? _selectedDropVisaType;
   VisaSubType? _selectedVisaSubType;
+  Purpose? _selectedPurpose;
   MrzResult? _scannedVisa;
 
   static const _visaTypes = [
@@ -190,12 +192,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _repo.getCountries(),
         _repo.getVisaTypes(),
         _repo.getStates(),
+        _repo.getPurposes(),
       ]);
       if (!mounted) return;
       setState(() {
         _countries = results[0] as List<MrzCountry>;
         _visaDropTypes = results[1] as List<VisaType>;
         _states = results[2] as List<IndianState>;
+        _purposes = results[3] as List<Purpose>;
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
             .firstOrNull;
@@ -815,6 +819,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _emailCtrl.text = pick(['Guest_Email', 'email']) ?? '';
       _phoneCtrl.text = pick(['Guest_PhoneNo', 'phone']) ?? '';
 
+      // Pre-select Purpose of Visit from OCR/API data (Guest_PurposeofVisit)
+      final purposeId = pick(['Guest_PurposeofVisit']);
+      if (purposeId != null && purposeId.isNotEmpty) {
+        _selectedPurpose = _purposes
+            .where((p) => p.purposeId == purposeId)
+            .firstOrNull;
+      }
+
       // Arrived From Country — filled from the 'country' key in the API response
       final arrivedCountry =
           pick(['Guest_Country', 'Guest_CountryofIssue', 'countryCode']) ??
@@ -1124,6 +1136,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'guest_Address': _addressCtrl.text,
         'Guest_Email': _emailCtrl.text,
         'Guest_PhoneNo': _phoneCtrl.text,
+        'Guest_PurposeofVisit': _selectedPurpose?.purposeId ?? '',
         // Travel
         'DateOfArrivalInIndia': _arrivalInIndiaCtrl.text,
         'Arrival_Time': _arrivalTimeCtrl.text,
@@ -1135,13 +1148,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'IntendedDurationStayIndividualHouse': _durationCtrl.text,
         'Guest_HotelCheckOut': _checkoutDateCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
-        'NextDestinationType': _nextDestinationType,
-        'NextDestinationState': _nextDestState?.stateId ?? '',
-        'NextDestinationDistrict': _nextDestDistrict?.districtId ?? '',
-        'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
-        'NextDestinationCountry': _nextDestCountry?.code ?? '',
-        'NextDestinationCity': _nextDestCityCtrl.text,
-        'NextDestinationPlaceOutside': _nextDestPlaceOutsideCtrl.text,
+        'NextDestination': _nextDestinationType == 'Inside India' ? 'I' : 'O',
+        'NextDestination_IN_State': _nextDestState?.stateId ?? '',
+        'FrroDistrictRecId': _nextDestDistrict?.districtId ?? '',
+        'NextDestination_IN_Place': _nextDestPlaceIndiaCtrl.text,
+        'NextDestination_OUT_Country': _nextDestCountry?.code ?? '',
+        'NextDestination_OUT_City': _nextDestCityCtrl.text,
+        'NextDestination_OUT_Place': _nextDestPlaceOutsideCtrl.text,
         // Images
         'passportFile': frontBase64,
         'passportBackFile': backBase64,
@@ -1231,19 +1244,34 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Extracting passport details...',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
                         color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Extracting passport details...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1434,6 +1462,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           controller: _addressCtrl,
           keyboardType: TextInputType.streetAddress,
         ),
+        if (_purposes.isNotEmpty)
+          _SearchableDropdown<Purpose>(
+            label: 'Purpose of Visit',
+            items: _purposes,
+            selected: _selectedPurpose,
+            itemLabel: (p) => p.purposeName,
+            onChanged: (p) => setState(() => _selectedPurpose = p),
+          ),
         _FormField(
           label: 'Email',
           controller: _emailCtrl,

@@ -26,11 +26,17 @@ class PassportFormPage extends StatefulWidget {
   /// Defaults to 'Passport Details' if not provided
   final String? pageTitle;
 
+  /// Pre-selected purpose of visit ID (from GetFrroGuestDataMobile
+  /// key: Guest_PurposeofVisit). When provided, the matching Purpose
+  /// entry will be auto-selected once the lookup list is loaded.
+  final String? initialPurposeOfVisitId;
+
   const PassportFormPage({
     super.key,
     this.scannedResult,
     this.showVisaSection = true,
     this.pageTitle,
+    this.initialPurposeOfVisitId,
   });
 
   @override
@@ -197,6 +203,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
         _purposes = results[1] as List<Purpose>;
         _visaDropTypes = results[2] as List<VisaType>;
         _states = results[3] as List<IndianState>;
+
+        // Pre-select Purpose of Visit from GetFrroGuestDataMobile (Guest_PurposeofVisit)
+        if (widget.initialPurposeOfVisitId != null &&
+            widget.initialPurposeOfVisitId!.isNotEmpty) {
+          _selectedPurpose = _purposes
+              .where((p) => p.purposeId == widget.initialPurposeOfVisitId)
+              .firstOrNull;
+        }
 
         final r = widget.scannedResult;
         if (r != null) {
@@ -736,6 +750,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'guest_Address': _addressCtrl.text,
         'Guest_Email': _emailCtrl.text,
         'Guest_PhoneNo': _phoneCtrl.text,
+        'Guest_PurposeofVisit': _selectedPurpose?.purposeId ?? '',
         // Travel
         'DateOfArrivalInIndia': _arrivalInIndiaCtrl.text,
         'Arrival_Time': _arrivalTimeCtrl.text,
@@ -747,13 +762,13 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'IntendedDurationStayIndividualHouse': _durationOfStayCtrl.text,
         'Guest_HotelCheckOut': _checkoutDateCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
-        'NextDestinationType': _nextDestinationType,
-        'NextDestinationState': _nextDestState?.stateId ?? '',
-        'NextDestinationDistrict': _nextDestDistrict?.districtId ?? '',
-        'NextDestinationPlaceIndia': _nextDestPlaceIndiaCtrl.text,
-        'NextDestinationCountry': _nextDestCountry?.code ?? '',
-        'NextDestinationCity': _nextDestCityCtrl.text,
-        'NextDestinationPlaceOutside': _nextDestPlaceOutsideCtrl.text,
+        'NextDestination': _nextDestinationType == 'Inside India' ? 'I' : 'O',
+        'NextDestination_IN_State': _nextDestState?.stateId ?? '',
+        'FrroDistrictRecId': _nextDestDistrict?.districtId ?? '',
+        'NextDestination_IN_Place': _nextDestPlaceIndiaCtrl.text,
+        'NextDestination_OUT_Country': _nextDestCountry?.code ?? '',
+        'NextDestination_OUT_City': _nextDestCityCtrl.text,
+        'NextDestination_OUT_Place': _nextDestPlaceOutsideCtrl.text,
         // Images
         'passportFile': widget.scannedResult?.fullImage ?? '',
         'passportBackFile': _toBase64FromPath(_backImagePath) ?? '',

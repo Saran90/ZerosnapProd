@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import '../../../../core/config/api_constants.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/network/api_base_helper.dart';
@@ -57,17 +59,67 @@ class GuestRemoteDataSourceImpl implements GuestRemoteDataSource {
       );
 
       // null = empty body (200 with no content) → treat as empty list
-      if (response == null) return [];
-
-      if (response is List) {
-        return response
-            .map((json) => GuestModel.fromJson(json as Map<String, dynamic>))
-            .toList();
+      if (response == null) {
+        dev.log('getGuestList: response is null', name: 'GuestDS');
+        return [];
       }
 
-      // Any other shape (e.g. a Map with a message) → empty list
-      return [];
-    } catch (e) {
+      final preview = response.toString();
+      dev.log(
+        'getGuestList: response type=${response.runtimeType}  '
+        'preview=${preview.substring(0, preview.length.clamp(0, 300))}',
+        name: 'GuestDS',
+      );
+
+      // Handle both a bare List and common envelope shapes:
+      // { "Data": [...] }, { "data": [...] }, { "Value": [...] }, { "value": [...] }
+      List<dynamic> list;
+      if (response is List) {
+        dev.log(
+          'getGuestList: bare List, length=${response.length}',
+          name: 'GuestDS',
+        );
+        list = response;
+      } else if (response is Map) {
+        dev.log(
+          'getGuestList: Map keys=${response.keys.toList()}',
+          name: 'GuestDS',
+        );
+        final inner =
+            response['Data'] ??
+            response['data'] ??
+            response['Value'] ??
+            response['value'] ??
+            response['result'] ??
+            response['Result'];
+        if (inner is List) {
+          dev.log(
+            'getGuestList: unwrapped list, length=${inner.length}',
+            name: 'GuestDS',
+          );
+          list = inner;
+        } else {
+          dev.log(
+            'getGuestList: no list under known envelope keys. '
+            'inner type=${inner?.runtimeType}, inner=$inner',
+            name: 'GuestDS',
+          );
+          return [];
+        }
+      } else {
+        dev.log(
+          'getGuestList: unexpected response type=${response.runtimeType}',
+          name: 'GuestDS',
+        );
+        return [];
+      }
+
+      dev.log('getGuestList: parsing ${list.length} items', name: 'GuestDS');
+      return list
+          .map((json) => GuestModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e, st) {
+      dev.log('getGuestList: exception: $e\n$st', name: 'GuestDS');
       if (e is ServerException || e is NetworkException) rethrow;
       throw ServerException('Failed to fetch guest list: $e');
     }

@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:developer' as dev;
+
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -89,12 +91,6 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       if (s.startsWith('M')) return 'M';
       if (s.startsWith('F')) return 'F';
       return s;
-    }
-
-    String imageData() {
-      if (g.profilePic.isEmpty) return '';
-      if (g.profilePic.startsWith('data:image')) return g.profilePic;
-      return 'data:image/jpeg;base64,${g.profilePic}';
     }
 
     String stayDuration() {
@@ -214,61 +210,6 @@ class _FrroListPageState extends State<_FrroListPageContent> {
         return age > 0 ? age.toString() : '';
       }
 
-      function uploadImage(base64Data) {
-        if (!base64Data || base64Data === '') return;
-        console.log('📸 Uploading photo...');
-        var previewSels = ['#photoPreview','#photo_preview','#imagePreview','#image_preview',
-          '#applicant_photo_preview','img[id*="preview"]','img[id*="photo"]',
-          'img[class*="preview"]','img[class*="photo"]'];
-        for (var i = 0; i < previewSels.length; i++) {
-          var prev = document.querySelector(previewSels[i]);
-          if (prev) { prev.src = base64Data; prev.style.display = 'block'; break; }
-        }
-        var hiddenSels = ['#photo_data','#photoData','#applicant_photo_data',
-          '[name="photo_data"]','[name="photoData"]','[name="applicant_photo_data"]'];
-        for (var i = 0; i < hiddenSels.length; i++) {
-          var h = document.querySelector(hiddenSels[i]);
-          if (h) { h.value = base64Data; break; }
-        }
-        try {
-          var b64 = base64Data.split(',')[1] || base64Data;
-          var bin = atob(b64);
-          var bytes = new Uint8Array(bin.length);
-          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          var blob = new Blob([bytes], {type:'image/jpeg'});
-          var file = new File([blob], 'guest_photo.jpg', {type:'image/jpeg', lastModified: Date.now()});
-          var dt = new DataTransfer();
-          dt.items.add(file);
-          var fileSels = ['#photo','#applicant_photo','#personal_photo','#photograph',
-            '[name="photo"]','[name="applicant_photo"]','[name="photograph"]',
-            'input[type="file"][accept*="image"]','input[type="file"][accept*="jpg"]','input[type="file"]'];
-          for (var i = 0; i < fileSels.length; i++) {
-            var fi = document.querySelector(fileSels[i]);
-            if (fi && fi.type === 'file') {
-              try { fi.files = dt.files; fi.dispatchEvent(new Event('change',{bubbles:true})); fi.dispatchEvent(new Event('input',{bubbles:true})); console.log('✅ Photo set: ' + fileSels[i]); break; } catch(ex) {}
-            }
-          }
-        } catch(err) { console.log('⚠️ Photo error: ' + err.message); }
-        setTimeout(function() {
-          var btnSels = ['#btnUploadPhoto','#uploadPhoto','#upload_photo','#photoUpload','#photo_upload',
-            '#btnPhoto','#uploadBtn','[name="btnUploadPhoto"]',
-            'input[type="button"][value*="Upload" i]','input[type="submit"][value*="Upload" i]',
-            'button[onclick*="upload" i]','button[onclick*="photo" i]','.upload-photo','.uploadPhoto','.btn-upload'];
-          var clicked = false;
-          for (var i = 0; i < btnSels.length; i++) {
-            var btn = document.querySelector(btnSels[i]);
-            if (btn) { btn.click(); console.log('✅ Upload btn: ' + btnSels[i]); clicked = true; break; }
-          }
-          if (!clicked) {
-            var allBtns = document.querySelectorAll('button,input[type="button"],input[type="submit"]');
-            for (var j = 0; j < allBtns.length; j++) {
-              var t = (allBtns[j].textContent || allBtns[j].value || '').toLowerCase();
-              if (t.includes('upload') || t.includes('photo') || t.includes('browse')) { allBtns[j].click(); break; }
-            }
-          }
-        }, 300);
-      }
-
       // SECTION 1: PERSONAL DETAILS
       fillFirst(['#applicant_surname','[name="applicant_surname"]'], '${e(g.lastName)}');
       fillFirst(['#applicant_givenname','[name="applicant_givenname"]'], '${e(g.firstName)}');
@@ -378,28 +319,99 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       fillFirst(['#applicant_hotelname','#hotel_name','#accommodation_name','[name="applicant_hotelname"]','[name="hotel_name"]','[name="accommodation_name"]'], '${e(g.branch.name)}');
 
       // SECTION 6: NEXT DESTINATION
-      // Real FRRO radio: applicant_next_dest_country_flag_r, values: "Inside India" / "Outside India"
+      // Real FRRO radio: applicant_next_dest_country_flag_r
+      // NextDestination: 0 = Inside India, 1 = Outside India
       ${g.nextDestination.isNotEmpty ? """
       var _nd = '${e(g.nextDestination)}';
-      var _ndInside = (_nd === 'I' || _nd.toLowerCase() === 'india' || _nd.toLowerCase() === 'inside india');
+      var _ndInside = (_nd === 'I');
+      (function() {
+        var radios = document.getElementsByName('applicant_next_dest_country_flag_r');
+        console.log('Radio ND = '+_nd);
+        console.log('Radio _ndInside = '+_ndInside);
+        console.log('Radio nextDestination = ${e(g.nextDestination)}');
+        var targetVal  = _nd;
+        var targetText = _nd === 'I' ? 'inside india' : 'outside india';
+        console.log('NextDest: g.nextDestination=${e(g.nextDestination)}, _nd=' + _nd + ', _ndInside=' + _ndInside + ', targetVal=' + targetVal + ', radios found=' + radios.length);
+        var clicked = false;
+        // Pass 1: match by radio value attribute (most reliable)
+        for (var i = 0; i < radios.length; i++) {
+        console.log('Radio: '+radios[i].value);
+        console.log('Radio Target: '+targetVal);
+          if (radios[i].value === targetVal) {
+            radios[i].checked = true;
+            radios[i].dispatchEvent(new Event('click',  {bubbles:true}));
+            radios[i].dispatchEvent(new Event('change', {bubbles:true}));
+            console.log('NextDest: matched by value=' + targetVal);
+            clicked = true; break;
+          }
+        }
+        // Pass 2: match by associated <label> text
+        if (!clicked) {
+          for (var i = 0; i < radios.length; i++) {
+            var lbl = null;
+            if (radios[i].id) lbl = document.querySelector('label[for="' + radios[i].id + '"]');
+            var lblTxt = lbl ? lbl.textContent.trim().toLowerCase()
+                             : (radios[i].nextSibling ? radios[i].nextSibling.textContent.trim().toLowerCase() : '');
+            if (lblTxt.indexOf(targetText) !== -1) {
+              radios[i].checked = true;
+              radios[i].dispatchEvent(new Event('click',  {bubbles:true}));
+              radios[i].dispatchEvent(new Event('change', {bubbles:true}));
+              console.log('NextDest: matched by label text=' + lblTxt);
+              clicked = true; break;
+            }
+          }
+        }
+        if (!clicked) {
+          console.log('NextDest: no radio matched, dumping radio values/labels:');
+          for (var i = 0; i < radios.length; i++) {
+            var lbl2 = radios[i].id ? document.querySelector('label[for="' + radios[i].id + '"]') : null;
+            console.log('  radio[' + i + '] value=' + radios[i].value + ' label=' + (lbl2 ? lbl2.textContent.trim() : 'n/a'));
+          }
+        }
+      })();
       if (_ndInside) {
-        (function() {
-          var radios = document.getElementsByName('applicant_next_dest_country_flag_r');
-          for (var i = 0; i < radios.length; i++) {
-            if (radios[i].nextSibling && radios[i].nextSibling.textContent.trim().toLowerCase() === 'inside india') {
-              radios[i].checked = true; radios[i].dispatchEvent(new Event('click')); break;
-            }
-          }
-        })();
+        ${g.nextDestinationInState.isNotEmpty ? """
+        setTimeout(function() {
+          console.log('NextDest: selecting state="${e(g.nextDestinationInState)}"');
+          selectFirst(['#applicant_next_destination_state_IN','[name="applicant_next_destination_state_IN"]'], '${e(g.nextDestinationInState)}');
+        }, 800);
+        """ : ''}
+        ${g.nextDestinationInDistrict.isNotEmpty ? """
+        setTimeout(function() {
+          console.log('NextDest: selecting district="${e(g.nextDestinationInDistrict)}"');
+          selectFirst(['#applicant_next_destination_city_district_IN','[name="applicant_next_destination_city_district_IN"]'], '${e(g.nextDestinationInDistrict)}');
+        }, 1400);
+        """ : ''}
+        ${g.nextDestinationInPlace.isNotEmpty ? """
+        fillFirst(['#applicant_next_destination_place_IN','[name="applicant_next_destination_place_IN"]'], '${e(g.nextDestinationInPlace)}');
+        """ : ''}
       } else {
-        (function() {
-          var radios = document.getElementsByName('applicant_next_dest_country_flag_r');
-          for (var i = 0; i < radios.length; i++) {
-            if (radios[i].nextSibling && radios[i].nextSibling.textContent.trim().toLowerCase() === 'outside india') {
-              radios[i].checked = true; radios[i].dispatchEvent(new Event('click')); break;
+        ${g.nextDestinationOutCountry.isNotEmpty ? """
+        setTimeout(function() {
+          console.log('Out Country - ${g.nextDestinationOutCountry}');
+          (function() {
+            var el = document.querySelector('#applicant_next_destination_country_OUT') ||
+                     document.querySelector('[name="applicant_next_destination_country_OUT"]');
+            if (!el) { console.log('Out Country: dropdown not found'); return; }
+            var val = '${e(g.nextDestinationOutCountry)}';
+            for (var i = 0; i < el.options.length; i++) {
+              if (el.options[i].value === val) {
+                el.selectedIndex = i;
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                console.log('Out Country: matched by value=' + val);
+                return;
+              }
             }
-          }
-        })();
+            console.log('Out Country: no match for value=' + val + ', total options=' + el.options.length);
+          })();
+        }, 300);
+        """ : ''}
+        ${g.nextDestinationOutCity.isNotEmpty ? """
+        fillFirst(['#applicant_next_destination_city_OUT','[name="applicant_next_destination_city_OUT"]'], '${e(g.nextDestinationOutCity)}');
+        """ : ''}
+        ${g.nextDestinationOutPlace.isNotEmpty ? """
+        fillFirst(['#applicant_next_destination_place_OUT','[name="applicant_next_destination_place_OUT"]'], '${e(g.nextDestinationOutPlace)}');
+        """ : ''}
       }
       """ : ''}
 
@@ -408,8 +420,18 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       selectFirst(['#applicant_purpovisit','#applicant_purpose','[name="applicant_purpovisit"]','[name="applicant_purpose"]'], '${e(g.purposeOfVisit)}');
 
       // SECTION 8: CONTACT DETAILS
-      // Real FRRO fields: applicant_contactnoinindia, applicant_contactnoperm
-      ${g.phoneNo.isNotEmpty ? "fillFirst(['#applicant_contactnoperm','[name=\"applicant_contactnoperm\"]'], '${e(g.phoneNo)}');" : ''}
+      // ContactPhoneInIndia       → Contact Phone No (In India)
+      // MobileInIndia             → Mobile No (In India)
+      // ContactPhonePermanentlyResiding → Contact Phone No (Permanently residing Country)
+      // MobilePermanentlyResiding → Mobile No (Permanently residing Country)
+      ${g.branch.contactPhoneInIndia.isNotEmpty ? "fillFirst(['#applicant_contactnoinindia','[name=\"applicant_contactnoinindia\"]','[id*=\"contactnoinindia\"]','[name*=\"contactnoinindia\"]'], '${e(g.branch.contactPhoneInIndia)}');" : ''}
+      ${g.branch.mobileInIndia.isNotEmpty ? "fillFirst(['#mcontactnoinindia','[name=\"mcontactnoinindia\"]','#applicant_mcontactnoinindia','[name=\"applicant_mcontactnoinindia\"]','[id*=\"mcontactnoinindia\"]','[name*=\"mcontactnoinindia\"]'], '${e(g.branch.mobileInIndia)}'); console.log('mobileInIndia fill attempted, value=${e(g.branch.mobileInIndia)}, found el:', document.querySelector('#mcontactnoinindia') || document.querySelector('[name=\"mcontactnoinindia\"]') || document.querySelector('[id*=\"mcontactnoinindia\"]') || 'NOT FOUND');" : ''}
+      ${g.branch.contactPhonePermanentlyResiding.isNotEmpty
+        ? "fillFirst(['#applicant_contactnoperm','[name=\"applicant_contactnoperm\"]','[id*=\"contactnoperm\"]','[name*=\"contactnoperm\"]'], '${e(g.branch.contactPhonePermanentlyResiding)}');"
+        : g.phoneNo.isNotEmpty
+        ? "fillFirst(['#applicant_contactnoperm','[name=\"applicant_contactnoperm\"]','[id*=\"contactnoperm\"]','[name*=\"contactnoperm\"]'], '${e(g.phoneNo)}');"
+        : ''}
+      ${g.branch.mobilePermanentlyResiding.isNotEmpty ? "fillFirst(['#mcontactnoperm','[name=\"mcontactnoperm\"]','#applicant_mcontactnoperm','[name=\"applicant_mcontactnoperm\"]','[id*=\"mcontactnoperm\"]','[name*=\"mcontactnoperm\"]'], '${e(g.branch.mobilePermanentlyResiding)}'); console.log('mobilePermanentlyResiding fill attempted, value=${e(g.branch.mobilePermanentlyResiding)}, found el:', document.querySelector('#mcontactnoperm') || document.querySelector('[name=\"mcontactnoperm\"]') || document.querySelector('[id*=\"mcontactnoperm\"]') || 'NOT FOUND');" : ''}
       ${g.email.isNotEmpty ? "fillFirst(['#applicant_email','#email','[name=\"applicant_email\"]','[name=\"email\"]'], '${e(g.email)}');" : ''}
 
       // Reference address in India — from Branch data
@@ -442,8 +464,6 @@ class _FrroListPageState extends State<_FrroListPageContent> {
       """ : ''}
       fillFirst(['#applicant_refpincode','[name="applicant_refpincode"]'],
         '${e(g.branch.pinCode)}');
-      // Phone in India from branch
-      ${g.branch.effectivePhone.isNotEmpty ? "fillFirst(['#applicant_contactnoinindia','[name=\"applicant_contactnoinindia\"]'], '${e(g.branch.effectivePhone)}');" : ''}
 
       // SECTION 9: PERMANENT ADDRESS (Address in country where residing permanently)
       // Populated from passport data: countryOfIssueText → address, city → city, nationality → country
@@ -458,12 +478,83 @@ class _FrroListPageState extends State<_FrroListPageContent> {
         ? "selectFirst(['#applicant_permcountry','[name=\"applicant_permcountry\"]'], '${e(g.countryOfIssueText.isNotEmpty ? g.countryOfIssueText : g.countryOfIssue)}');"
         : ''}
 
-      // PROFILE PHOTO
-      ${g.profilePic.isNotEmpty ? "setTimeout(function() { uploadImage('${imageData()}'); }, 500);" : "console.log('No profile image for this guest');"}
+      // PROFILE PHOTO — injected separately via _photoUploadScript to avoid
+      // large base64 strings corrupting the main script execution.
 
       console.log('FRRO form filled for: ${e(g.fullName)} (ID: ${g.guestdataId})');
     })();
   """;
+  }
+
+  /// Injects the profile photo into the FRRO form.
+  static String _photoUploadScript(Guest g) {
+    if (g.profilePic.isEmpty)
+      return "console.log('No profile image for this guest');";
+    final imageData = g.profilePic.startsWith('data:image')
+        ? g.profilePic
+        : 'data:image/jpeg;base64,${g.profilePic}';
+    return """
+    (function() {
+      var base64Data = '$imageData';
+      console.log('📸 _photoUploadScript: injecting photo, length=' + base64Data.length);
+      var previewSels = ['#photoPreview','#photo_preview','#imagePreview','#image_preview',
+        '#applicant_photo_preview','img[id*="preview"]','img[id*="photo"]',
+        'img[class*="preview"]','img[class*="photo"]'];
+      for (var i = 0; i < previewSels.length; i++) {
+        var prev = document.querySelector(previewSels[i]);
+        if (prev) { prev.src = base64Data; prev.style.display = 'block'; break; }
+      }
+      var hiddenSels = ['#photo_data','#photoData','#applicant_photo_data',
+        '[name="photo_data"]','[name="photoData"]','[name="applicant_photo_data"]'];
+      for (var i = 0; i < hiddenSels.length; i++) {
+        var h = document.querySelector(hiddenSels[i]);
+        if (h) { h.value = base64Data; break; }
+      }
+      try {
+        var b64 = base64Data.split(',')[1] || base64Data;
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        var blob = new Blob([bytes], {type:'image/jpeg'});
+        var file = new File([blob], 'guest_photo_${g.guestdataId}.jpg', {type:'image/jpeg', lastModified: Date.now()});
+        var dt = new DataTransfer();
+        dt.items.add(file);
+        var fileSels = ['#photo','#applicant_photo','#personal_photo','#photograph',
+          '[name="photo"]','[name="applicant_photo"]','[name="photograph"]',
+          'input[type="file"][accept*="image"]','input[type="file"][accept*="jpg"]','input[type="file"]'];
+        for (var i = 0; i < fileSels.length; i++) {
+          var fi = document.querySelector(fileSels[i]);
+          if (fi && fi.type === 'file') {
+            try {
+              fi.files = dt.files;
+              fi.dispatchEvent(new Event('change',{bubbles:true}));
+              fi.dispatchEvent(new Event('input',{bubbles:true}));
+              console.log('✅ Photo file input set: ' + fileSels[i]);
+              break;
+            } catch(ex) {}
+          }
+        }
+      } catch(err) { console.log('⚠️ Photo error: ' + err.message); }
+      setTimeout(function() {
+        var btnSels = ['#btnUploadPhoto','#uploadPhoto','#upload_photo','#photoUpload',
+          '#photo_upload','#btnPhoto','#uploadBtn','[name="btnUploadPhoto"]',
+          'input[type="button"][value*="Upload" i]','input[type="submit"][value*="Upload" i]',
+          'button[onclick*="upload" i]','button[onclick*="photo" i]','.upload-photo','.uploadPhoto','.btn-upload'];
+        for (var i = 0; i < btnSels.length; i++) {
+          var btn = document.querySelector(btnSels[i]);
+          if (btn) { btn.click(); console.log('✅ Upload btn clicked: ' + btnSels[i]); return; }
+        }
+        var allBtns = document.querySelectorAll('button,input[type="button"],input[type="submit"]');
+        for (var j = 0; j < allBtns.length; j++) {
+          var t = (allBtns[j].textContent || allBtns[j].value || '').toLowerCase();
+          if (t.includes('upload') || t.includes('photo') || t.includes('browse')) {
+            allBtns[j].click(); console.log('✅ Upload btn clicked by text: ' + t); return;
+          }
+        }
+        console.log('⚠️ Upload button not found');
+      }, 300);
+    })();
+    """;
   }
 
   @override
@@ -502,12 +593,25 @@ class _FrroListPageState extends State<_FrroListPageContent> {
                 lower.contains('addcform')) {
               // Form page — fill guest data if one is selected
               if (_selectedGuest != null) {
+                dev.log(
+                  'FRRO fill — nextDestination="${_selectedGuest!.nextDestination}" '
+                  'isEmpty=${_selectedGuest!.nextDestination.isEmpty}',
+                  name: 'FrroFill',
+                );
                 await _webCtrl.runJavaScript(
                   _formFillScript(
                     _selectedGuest!,
                     frroDistrictId: _frroDistrictId,
                   ),
                 );
+                // Inject photo separately after a delay to avoid large base64
+                // corrupting the main script
+                await Future.delayed(const Duration(milliseconds: 1000));
+                if (mounted) {
+                  await _webCtrl.runJavaScript(
+                    _photoUploadScript(_selectedGuest!),
+                  );
+                }
               }
             } else {
               // Any other page — try credentials in case it's a login redirect
@@ -647,9 +751,13 @@ class _FrroListPageState extends State<_FrroListPageContent> {
               if (lower.contains('formc.jsp') ||
                   lower.contains('newcform') ||
                   lower.contains('addcform')) {
-                _webCtrl.runJavaScript(
-                  _formFillScript(guest, frroDistrictId: _frroDistrictId),
+                // Always reload — clears cached photo and re-triggers onPageFinished
+                // which fills the form and uploads the photo via the normal flow.
+                dev.log(
+                  'FRRO: reloading page for guest ${guest.fullName}',
+                  name: 'FrroFill',
                 );
+                _webCtrl.reload();
               }
             }
           });

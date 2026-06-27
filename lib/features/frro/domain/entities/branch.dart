@@ -15,8 +15,12 @@ class Branch extends Equatable {
   final String addressInIndia; // AddressInIndia — reference address in India
   final int
   fromGuestAddressInIndia; // 0 = use branch address, 1 = use guest address
-  final String contactPhoneInIndia; // ContactPhoneInIndia
-  final String mobileInIndia; // MobileInIndia
+  final String contactPhoneInIndia; // ContactPhoneInIndia → contactnoinindia
+  final String mobileInIndia; // MobileInIndia → mcontactnoinindia
+  final String
+  contactPhonePermanentlyResiding; // ContactPhonePermanentlyResiding → contactnoperm
+  final String
+  mobilePermanentlyResiding; // MobilePermanentlyResiding → mcontactnoperm
 
   const Branch({
     required this.name,
@@ -31,6 +35,8 @@ class Branch extends Equatable {
     required this.fromGuestAddressInIndia,
     required this.contactPhoneInIndia,
     required this.mobileInIndia,
+    required this.contactPhonePermanentlyResiding,
+    required this.mobilePermanentlyResiding,
   });
 
   /// The effective reference address to use in the FRRO form.
@@ -55,6 +61,8 @@ class Branch extends Equatable {
     fromGuestAddressInIndia: 0,
     contactPhoneInIndia: '',
     mobileInIndia: '',
+    contactPhonePermanentlyResiding: '',
+    mobilePermanentlyResiding: '',
   );
 
   @override
@@ -71,5 +79,7 @@ class Branch extends Equatable {
     fromGuestAddressInIndia,
     contactPhoneInIndia,
     mobileInIndia,
+    contactPhonePermanentlyResiding,
+    mobilePermanentlyResiding,
   ];
 }
