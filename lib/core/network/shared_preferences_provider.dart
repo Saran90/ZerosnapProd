@@ -27,6 +27,7 @@ class SharedPreferencesProvider {
   static const _keyShowGuestSignature = 'showGuestSignature';
   static const _keyShowPrintMobileApp = 'showPrintMobileApp';
   static const _keyShowFrroCheckOutInExt = 'showFrroCheckOutInExt';
+  static const _keyShowNextDestination = 'showNextDestination';
   static const _keyScanByMrz = 'scanByMrz';
 
   // ── Logout behaviour ──────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ class SharedPreferencesProvider {
       prefs.setBool(_keyShowGuestSignature, session.showGuestSignature),
       prefs.setBool(_keyShowPrintMobileApp, session.showPrintMobileApp),
       prefs.setBool(_keyShowFrroCheckOutInExt, session.showFrroCheckOutInExt),
+      prefs.setBool(_keyShowNextDestination, session.showNextDestination),
       prefs.setBool(_keyScanByMrz, session.scanByMrz),
     ]);
   }
@@ -132,6 +134,7 @@ class SharedPreferencesProvider {
       showGuestSignature: prefs.getBool(_keyShowGuestSignature) ?? false,
       showPrintMobileApp: prefs.getBool(_keyShowPrintMobileApp) ?? false,
       showFrroCheckOutInExt: prefs.getBool(_keyShowFrroCheckOutInExt) ?? false,
+      showNextDestination: prefs.getBool(_keyShowNextDestination) ?? false,
       scanByMrz: prefs.getBool(_keyScanByMrz) ?? false,
     );
   }
@@ -193,6 +196,7 @@ class LoginSession {
   final bool showGuestSignature;
   final bool showPrintMobileApp;
   final bool showFrroCheckOutInExt;
+  final bool showNextDestination;
   final bool scanByMrz; // true = MRZ scanner, false = OCR API
 
   const LoginSession({
@@ -216,6 +220,7 @@ class LoginSession {
     this.showGuestSignature = false,
     this.showPrintMobileApp = false,
     this.showFrroCheckOutInExt = false,
+    this.showNextDestination = false,
     this.scanByMrz = false, // default to OCR flow
   });
 }

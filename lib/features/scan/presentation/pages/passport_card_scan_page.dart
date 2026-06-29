@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
@@ -144,11 +145,16 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   bool _isExtractingOcr = false;
   bool _isExtractingVisa = false;
 
+  /// Controls visibility of the Next Destination fields.
+  /// null = not yet loaded from prefs, true = show, false = hide
+  bool? _showNextDestination;
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     _loadLookups();
+    _loadNextDestinationVisibility();
 
     // Set hotel arrival date and time to today's date and current time
     final now = DateTime.now();
@@ -1579,7 +1585,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             }),
           ),
         ),
-        // Next Destination Type Dropdown
+        // Next Destination Type Dropdown - only shown if ShowNextDestination is enabled in settings
+        if (_showNextDestination == true) ...[
         _DropdownField(
           label: 'Next Destination',
           value: _nextDestinationType,
@@ -1622,6 +1629,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           _FormField(label: 'City', controller: _nextDestCityCtrl),
           _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
         ],
+        ], // end of _showNextDestination conditional
       ],
     );
   }
@@ -1888,6 +1896,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   // ── Signature section ─────────────────────────────────────────────────────
+  /// Loads the ShowNextDestination flag from SharedPreferences.
+  Future<void> _loadNextDestinationVisibility() async {
+    final session = await SharedPreferencesProvider().getLoginSession();
+    if (!mounted) return;
+    setState(() {
+      _showNextDestination = session?.showNextDestination ?? false;
+    });
+  }
+
   Widget _buildSignatureSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
