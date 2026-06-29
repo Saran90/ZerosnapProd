@@ -85,17 +85,22 @@ class IndianState {
 }
 
 class IndianDistrict {
-  final String districtId;
+  final String
+  districtRecId; // FrroDistrictRecId (numeric, used in SavePassportAndVisa)
+  final String
+  districtId; // FrroDistrictId (alphanumeric, used in FRRO form selects)
   final String districtName;
   final String stateId;
 
   const IndianDistrict({
+    required this.districtRecId,
     required this.districtId,
     required this.districtName,
     required this.stateId,
   });
 
   factory IndianDistrict.fromJson(Map<String, dynamic> json) => IndianDistrict(
+    districtRecId: json['FrroDistrictRecId']?.toString() ?? '',
     districtId: json['FrroDistrictId'] ?? '',
     districtName: json['FrroDistrict'] ?? '',
     stateId: json['zs_stateid'] ?? '',

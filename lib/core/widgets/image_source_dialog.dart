@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 /// Shows the same pill-button dialog used in the passport section.
-/// Calls [onPicked] with the chosen [ImageSource], or does nothing on Cancel.
+/// Calls [onPicked] with the chosen [ImageSource], or [onCancel] on Cancel.
 void showImageSourceDialog(
   BuildContext context, {
   required String title,
   required void Function(ImageSource) onPicked,
+  VoidCallback? onCancel,
 }) {
   showDialog(
     context: context,
@@ -58,7 +59,10 @@ void showImageSourceDialog(
             _SourceButton(
               label: 'Cancel',
               filled: false,
-              onTap: () => Navigator.of(dialogCtx).pop(),
+              onTap: () {
+                Navigator.of(dialogCtx).pop();
+                onCancel?.call();
+              },
             ),
           ],
         ),

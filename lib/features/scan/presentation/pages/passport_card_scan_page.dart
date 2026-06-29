@@ -408,8 +408,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   void _showImageSourceSheet({
     required String title,
     required void Function(ImageSource) onPicked,
+    VoidCallback? onCancel,
   }) {
-    showImageSourceDialog(context, title: title, onPicked: onPicked);
+    showImageSourceDialog(
+      context,
+      title: title,
+      onPicked: onPicked,
+      onCancel: onCancel,
+    );
   }
 
   Future<String?> _captureImage(ImageSource source) async {
@@ -602,6 +608,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   Future<void> _captureBackImageAndExtract() async {
     _showImageSourceSheet(
       title: 'Passport Back / Last Page',
+      onCancel: () async {
+        // User cancelled the chooser — extract with front image only
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) await _extractFromImage();
+      },
       onPicked: (source) async {
         final path = await _captureImage(source);
         if (path == null || !mounted) {
@@ -1025,12 +1036,18 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     setState(() {
       _visaDocNoCtrl.text =
           pick(['Guest_VisaNo', 'visa_number', 'visaNumber']) ?? '';
-      _visaIssuingDateCtrl.text =
+      final issueDate =
           pick(['Guest_VisaDateofIssue', 'issue_date', 'issueDate']) ?? '';
+      _visaIssuingDateCtrl.text = issueDate;
       _visaExpiryDateCtrl.text =
           pick(['Guest_VisaValidTill', 'expiry_date', 'expiryDate']) ?? '';
       final poiCity = pick(['Guest_VisaPOICity', 'poi_city', 'poiCity']) ?? '';
       _visaPOICityCtrl.text = poiCity;
+
+      // Use visa issue date as Date of Arrival in India
+      if (issueDate.isNotEmpty) {
+        _arrivalInIndiaCtrl.text = issueDate;
+      }
 
       // Arrived From City and Place — pre-fill from visa's place of issue city
       if (poiCity.isNotEmpty) {
@@ -1150,7 +1167,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'Guest_HotelCheckOutDate': _checkoutDate?.toIso8601String() ?? '',
         'NextDestination': _nextDestinationType == 'Inside India' ? 'I' : 'O',
         'NextDestination_IN_State': _nextDestState?.stateId ?? '',
-        'FrroDistrictRecId': _nextDestDistrict?.districtId ?? '',
+        'NextDestination_IN_District': _nextDestDistrict?.districtRecId ?? '',
         'NextDestination_IN_Place': _nextDestPlaceIndiaCtrl.text,
         'NextDestination_OUT_Country': _nextDestCountry?.code ?? '',
         'NextDestination_OUT_City': _nextDestCityCtrl.text,

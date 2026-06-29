@@ -66,6 +66,14 @@ class PassportRepository {
 
   /// POST to /api/SavePassportAndVisa
   Future<bool> savePassport(Map<String, dynamic> body) async {
+    // Log the full request body (excluding large base64 image fields)
+    final loggableBody = Map<String, dynamic>.from(body)
+      ..updateAll((k, v) {
+        if (v is String && v.length > 200) return '[${v.length} chars]';
+        return v;
+      });
+    dev.log('SavePassportAndVisa body: $loggableBody', name: 'PassportRepo');
+
     final url = await _prefs.getBaseUrl();
     final response =
         await _api.post(
