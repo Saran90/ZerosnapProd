@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
@@ -65,11 +66,16 @@ class _CardScanPageState extends State<CardScanPage> {
   bool _isVerifying = false;
   bool _isSubmitting = false;
 
+  /// Controls visibility of the Room Number field.
+  /// null = not yet loaded from prefs, true = show, false = hide
+  bool? _showRoomNo;
+
   bool get _isOtherId => widget.cardType == DomesticCardType.otherId;
 
   @override
   void initState() {
     super.initState();
+    _loadRoomNoVisibility();
     _checkoutCtrl.text = _fmt(_checkoutDate);
     _durationCtrl.addListener(_onDurationChanged);
     // Auto-open
@@ -115,6 +121,15 @@ class _CardScanPageState extends State<CardScanPage> {
       '${d.day.toString().padLeft(2, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.year}';
+
+  /// Loads the ShowRoomNo flag from SharedPreferences.
+  Future<void> _loadRoomNoVisibility() async {
+    final session = await SharedPreferencesProvider().getLoginSession();
+    if (!mounted) return;
+    setState(() {
+      _showRoomNo = session?.showRoomNo ?? false;
+    });
+  }
 
   // ── Image capture ─────────────────────────────────────────────────────────
 
@@ -614,6 +629,15 @@ class _CardScanPageState extends State<CardScanPage> {
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
     if (!_validate()) return;
+
+    // Check for duplicate before submission
+    final isDuplicate = await checkAndHandleDuplicate(
+      context,
+      documentNo: _docNoCtrl.text,
+      cardType: _guestCardType(),
+    );
+    if (isDuplicate || !mounted) return;
+
     setState(() => _isSubmitting = true);
     try {
       final frontBase64 = await CardScanRepository.toBase64(_frontImagePath);
@@ -742,8 +766,10 @@ class _CardScanPageState extends State<CardScanPage> {
                 _buildDetailsCard(),
                 const SizedBox(height: 16),
                 _buildStayCard(),
-                const SizedBox(height: 16),
-                _buildOtherDetailsCard(),
+                if (_showRoomNo == true) ...[
+                  const SizedBox(height: 16),
+                  _buildOtherDetailsCard(),
+                ],
                 const SizedBox(height: 16),
                 _buildSignatureCard(),
               ],
@@ -1018,6 +1044,8 @@ class _CardScanPageState extends State<CardScanPage> {
               controller: _durationCtrl,
               keyboardType: TextInputType.number,
             ),
+            if (_showRoomNo == true)
+              _FormField(label: 'Room Number', controller: _roomNoCtrl),
             _DateField(
               label: 'Checkout Date',
               controller: _checkoutCtrl,

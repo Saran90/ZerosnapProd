@@ -112,6 +112,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _addressCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _roomNoCtrl = TextEditingController();
   String _sex = 'M';
   DateTime? _dob, _issuingDate, _expiryDate;
 
@@ -149,12 +150,17 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   /// null = not yet loaded from prefs, true = show, false = hide
   bool? _showNextDestination;
 
+  /// Controls visibility of the Room Number field.
+  /// null = not yet loaded from prefs, true = show, false = hide
+  bool? _showRoomNo;
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     _loadLookups();
     _loadNextDestinationVisibility();
+    _loadRoomNoVisibility();
 
     // Set hotel arrival date and time to today's date and current time
     final now = DateTime.now();
@@ -326,6 +332,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _addressCtrl,
       _emailCtrl,
       _phoneCtrl,
+      _roomNoCtrl,
       _arrivalInIndiaCtrl,
       _arrivalTimeCtrl,
       _hotelArrivalDateCtrl,
@@ -1132,6 +1139,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       return;
     }
     if (!_validate()) return;
+
+    // Check for duplicate before submission
+    final isDuplicate = await checkAndHandleDuplicate(
+      context,
+      documentNo: _docNoCtrl.text,
+      cardType: GuestCardType.indianPassport,
+    );
+    if (isDuplicate || !mounted) return;
+
     setState(() => _isSubmitting = true);
     try {
       final frontBase64 = base64Encode(
@@ -1159,6 +1175,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'guest_Address': _addressCtrl.text,
         'Guest_Email': _emailCtrl.text,
         'Guest_PhoneNo': _phoneCtrl.text,
+        'GuestRoomNo': _roomNoCtrl.text,
         'Guest_PurposeofVisit': _selectedPurpose?.purposeId ?? '',
         // Travel
         'DateOfArrivalInIndia': _arrivalInIndiaCtrl.text,
@@ -1210,6 +1227,46 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           body['visaFile'] = _scannedVisa?.fullImage ?? '';
         }
       }
+
+      // Print request body for debugging
+      debugPrint(
+        '==================== SavePassportAndVisa Request Body ====================',
+      );
+      debugPrint('Total fields: ${body.length}');
+      // Print body without base64 image data (too long for logs)
+      final bodyForPrint = Map<String, dynamic>.from(body);
+      if (bodyForPrint['passportFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['passportFile'] =
+            '<base64 image: ${bodyForPrint['passportFile'].toString().length} chars>';
+      }
+      if (bodyForPrint['passportBackFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['passportBackFile'] =
+            '<base64 image: ${bodyForPrint['passportBackFile'].toString().length} chars>';
+      }
+      if (bodyForPrint['profileImageFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['profileImageFile'] =
+            '<base64 image: ${bodyForPrint['profileImageFile'].toString().length} chars>';
+      }
+      if (bodyForPrint['User_Signature']?.toString().isNotEmpty == true) {
+        bodyForPrint['User_Signature'] =
+            '<base64 signature: ${bodyForPrint['User_Signature'].toString().length} chars>';
+      }
+      if (bodyForPrint['visaFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['visaFile'] =
+            '<base64 image: ${bodyForPrint['visaFile'].toString().length} chars>';
+      }
+      if (bodyForPrint['visaFile2']?.toString().isNotEmpty == true) {
+        bodyForPrint['visaFile2'] =
+            '<base64 image: ${bodyForPrint['visaFile2'].toString().length} chars>';
+      }
+      if (bodyForPrint['visaFile3']?.toString().isNotEmpty == true) {
+        bodyForPrint['visaFile3'] =
+            '<base64 image: ${bodyForPrint['visaFile3'].toString().length} chars>';
+      }
+      debugPrint(const JsonEncoder.withIndent('  ').convert(bodyForPrint));
+      debugPrint(
+        '=========================================================================',
+      );
 
       final success = await _repo.savePassport(body);
       if (!mounted) return;
@@ -1571,6 +1628,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           controller: _durationCtrl,
           keyboardType: TextInputType.number,
         ),
+        if (_showRoomNo == true)
+          _FormField(label: 'Room Number', controller: _roomNoCtrl),
         _DateField(
           label: 'Checkout Date',
           controller: _checkoutDateCtrl,
@@ -1587,48 +1646,48 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         ),
         // Next Destination Type Dropdown - only shown if ShowNextDestination is enabled in settings
         if (_showNextDestination == true) ...[
-        _DropdownField(
-          label: 'Next Destination',
-          value: _nextDestinationType,
-          items: const ['Inside India', 'Outside India'],
-          onChanged: (v) => setState(() => _nextDestinationType = v!),
-        ),
-        // Conditional fields for Inside India
-        if (_nextDestinationType == 'Inside India') ...[
-          _StateDropdown(
-            label: 'State',
-            states: _states,
-            selected: _nextDestState,
-            onChanged: (state) {
-              setState(() => _nextDestState = state);
-              if (state != null) {
-                _loadDistrictsForState(state.stateId);
-              }
-            },
+          _DropdownField(
+            label: 'Next Destination',
+            value: _nextDestinationType,
+            items: const ['Inside India', 'Outside India'],
+            onChanged: (v) => setState(() => _nextDestinationType = v!),
           ),
-          _DistrictDropdown(
-            label: 'District',
-            districts: _nextDestState != null
-                ? (_districtsByState[_nextDestState!.stateId] ?? [])
-                : [],
-            selected: _nextDestDistrict,
-            onChanged: (district) =>
-                setState(() => _nextDestDistrict = district),
-            enabled: _nextDestState != null,
-          ),
-          _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
-        ],
-        // Conditional fields for Outside India
-        if (_nextDestinationType == 'Outside India') ...[
-          _CountryDropdown(
-            label: 'Country',
-            countries: _countries,
-            selected: _nextDestCountry,
-            onChanged: (c) => setState(() => _nextDestCountry = c),
-          ),
-          _FormField(label: 'City', controller: _nextDestCityCtrl),
-          _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
-        ],
+          // Conditional fields for Inside India
+          if (_nextDestinationType == 'Inside India') ...[
+            _StateDropdown(
+              label: 'State',
+              states: _states,
+              selected: _nextDestState,
+              onChanged: (state) {
+                setState(() => _nextDestState = state);
+                if (state != null) {
+                  _loadDistrictsForState(state.stateId);
+                }
+              },
+            ),
+            _DistrictDropdown(
+              label: 'District',
+              districts: _nextDestState != null
+                  ? (_districtsByState[_nextDestState!.stateId] ?? [])
+                  : [],
+              selected: _nextDestDistrict,
+              onChanged: (district) =>
+                  setState(() => _nextDestDistrict = district),
+              enabled: _nextDestState != null,
+            ),
+            _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
+          ],
+          // Conditional fields for Outside India
+          if (_nextDestinationType == 'Outside India') ...[
+            _CountryDropdown(
+              label: 'Country',
+              countries: _countries,
+              selected: _nextDestCountry,
+              onChanged: (c) => setState(() => _nextDestCountry = c),
+            ),
+            _FormField(label: 'City', controller: _nextDestCityCtrl),
+            _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
+          ],
         ], // end of _showNextDestination conditional
       ],
     );
@@ -1902,6 +1961,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     if (!mounted) return;
     setState(() {
       _showNextDestination = session?.showNextDestination ?? false;
+    });
+  }
+
+  /// Loads the ShowRoomNo flag from SharedPreferences.
+  Future<void> _loadRoomNoVisibility() async {
+    final session = await SharedPreferencesProvider().getLoginSession();
+    if (!mounted) return;
+    setState(() {
+      _showRoomNo = session?.showRoomNo ?? false;
     });
   }
 
