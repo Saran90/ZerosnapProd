@@ -12,6 +12,9 @@ import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
 import '../../domain/entities/mrz_result.dart';
+import '../utils/date_validator.dart';
+import '../utils/image_converter.dart';
+import '../utils/request_body_logger.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
 import 'mrz_scanner_page.dart';
@@ -673,27 +676,24 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   // -- Validation ------------------------------------------------------------
   bool _validate() {
-    if (_issuingDateCtrl.text.isNotEmpty &&
-        _issuingDateCtrl.text.toLowerCase() != 'unknown') {
-      final d = _tryParseDate(_issuingDateCtrl.text);
-      if (d != null && d.isAfter(DateTime.now())) {
-        _showSnack('Enter a valid passport issuing date');
-        return false;
-      }
+    // Validate passport issuing date
+    final issuingDateError = DateValidator.validateIssuingDate(
+      _issuingDateCtrl.text,
+    );
+    if (issuingDateError != null) {
+      _showSnack(issuingDateError);
+      return false;
     }
-    if (_expiryDateCtrl.text.isNotEmpty &&
-        _expiryDateCtrl.text.toLowerCase() != 'unknown') {
-      final d = _tryParseDate(_expiryDateCtrl.text);
-      if (d != null &&
-          d.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
-        _showSnack('Passport has expired');
-        return false;
-      }
-      if (d != null && d.isBefore(DateTime.now())) {
-        _showSnack('Passport expiry date must be in the future');
-        return false;
-      }
+
+    // Validate passport expiry date
+    final passportExpiryError = DateValidator.validatePassportExpiryDate(
+      _expiryDateCtrl.text,
+    );
+    if (passportExpiryError != null) {
+      _showSnack(passportExpiryError);
+      return false;
     }
+
     if (_visaType.isEmpty) {
       _showSnack('Please select a visa type');
       return false;
@@ -720,27 +720,25 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _showSnack('Please scan a visa to continue');
       return false;
     }
-    if (_visaIssuingDateCtrl.text.isNotEmpty &&
-        _visaIssuingDateCtrl.text.toLowerCase() != 'unknown') {
-      final d = _tryParseDate(_visaIssuingDateCtrl.text);
-      if (d != null && d.isAfter(DateTime.now())) {
-        _showSnack('Enter a valid visa issuing date');
-        return false;
-      }
+
+    // Validate visa issuing date
+    final visaIssuingDateError = DateValidator.validateVisaIssuingDate(
+      _visaIssuingDateCtrl.text,
+    );
+    if (visaIssuingDateError != null) {
+      _showSnack(visaIssuingDateError);
+      return false;
     }
-    if (_visaExpiryDateCtrl.text.isNotEmpty &&
-        _visaExpiryDateCtrl.text.toLowerCase() != 'unknown') {
-      final d = _tryParseDate(_visaExpiryDateCtrl.text);
-      if (d != null &&
-          d.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
-        _showSnack('Visa has expired');
-        return false;
-      }
-      if (d != null && d.isBefore(DateTime.now())) {
-        _showSnack('Visa expiry date must be in the future');
-        return false;
-      }
+
+    // Validate visa expiry date
+    final visaExpiryError = DateValidator.validateVisaExpiryDate(
+      _visaExpiryDateCtrl.text,
+    );
+    if (visaExpiryError != null) {
+      _showSnack(visaExpiryError);
+      return false;
     }
+
     return true;
   }
 
@@ -758,14 +756,8 @@ class _PassportFormPageState extends State<PassportFormPage> {
     return null;
   }
 
-  String? _toBase64FromPath(String? path) {
-    if (path == null || path.isEmpty) return null;
-    try {
-      return base64Encode(File(path).readAsBytesSync());
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _toBase64FromPath(String? path) =>
+      ImageConverter.toBase64FromPath(path);
 
   // -- Submit ----------------------------------------------------------------
   Future<void> _submit() async {
