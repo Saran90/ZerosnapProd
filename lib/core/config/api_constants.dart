@@ -7,7 +7,7 @@ class ApiConstants {
   static const String checkApiAccess = '/api/CheckApiIsAccessible';
 
   // Passport / Visa
-  static const String savePassport = '/api/SavePassportAndVisa';
+  static const String savePassport = '/api/SavePassportAndVisaUpload';
   static const String saveIndianPassport = '/api/SaveIndianPassport';
   static const String extractPassport = '/api/Zerosnap/GetGVPassportFront';
 

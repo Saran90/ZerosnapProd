@@ -125,7 +125,7 @@
 - `/api/CheckApiIsAccessible`
 
 #### Passport/Visa (3):
-- `/api/SavePassportAndVisa`
+- `/api/SavePassportAndVisaUpload`
 - `/api/SaveIndianPassport`
 - `/api/Zerosnap/GetGVPassportFront`
 
