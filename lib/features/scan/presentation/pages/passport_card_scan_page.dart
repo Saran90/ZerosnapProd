@@ -103,8 +103,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _surnameCtrl = TextEditingController();
   final _givenNamesCtrl = TextEditingController();
   final _docNoCtrl = TextEditingController();
-  final _issuingCountryCtrl = TextEditingController();
-  final _nationalityCtrl = TextEditingController();
+  MrzCountry? _selectedIssuingCountry;
+  MrzCountry? _selectedNationality;
+  MrzCountry? _selectedPlaceOfIssueCountry;
   final _dobCtrl = TextEditingController();
   final _issuingDateCtrl = TextEditingController();
   final _expiryDateCtrl = TextEditingController();
@@ -121,7 +122,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _arrivalTimeCtrl = TextEditingController();
   final _hotelArrivalDateCtrl = TextEditingController();
   final _hotelArrivalTimeCtrl = TextEditingController();
-  final _arrivedFromCountryCtrl = TextEditingController();
+  MrzCountry? _selectedArrivedFromCountry;
   final _arrivedFromCityCtrl = TextEditingController();
   final _arrivedFromPlaceCtrl = TextEditingController();
   final _durationCtrl = TextEditingController();
@@ -323,8 +324,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _surnameCtrl,
       _givenNamesCtrl,
       _docNoCtrl,
-      _issuingCountryCtrl,
-      _nationalityCtrl,
       _dobCtrl,
       _issuingDateCtrl,
       _expiryDateCtrl,
@@ -337,7 +336,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       _arrivalTimeCtrl,
       _hotelArrivalDateCtrl,
       _hotelArrivalTimeCtrl,
-      _arrivedFromCountryCtrl,
       _arrivedFromCityCtrl,
       _arrivedFromPlaceCtrl,
       _durationCtrl,
@@ -819,18 +817,40 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           '';
       _docNoCtrl.text =
           pick(['Guest_DocumentNo', 'document_number', 'documentNumber']) ?? '';
-      _nationalityCtrl.text =
-          pick(['Guest_NationalityTxt', 'Guest_Nationality', 'nationality']) ??
-          '';
-      _issuingCountryCtrl.text =
-          pick(['Guest_Country', 'Guest_CountryofIssue', 'countryCode']) ?? '';
-      debugPrint('Issuing COuntry: ${_issuingCountryCtrl.text}');
+
+      // Nationality → match by zs_nationalitycode (Guest_Nationality)
+      final nationalityCode = pick([
+        'Guest_Nationality',
+        'Guest_NationalityTxt',
+        'nationality',
+      ]);
+      if (nationalityCode != null && nationalityCode.isNotEmpty) {
+        _selectedNationality = _countries
+            .where((c) => c.code.toUpperCase() == nationalityCode.toUpperCase())
+            .firstOrNull;
+      }
+
+      // Issuing Country → prefer countryCode/Guest_Country, fall back to Guest_Nationality
+      final issuingCode = pick(['Guest_Nationality']);
+      if (issuingCode != null && issuingCode.isNotEmpty) {
+        _selectedIssuingCountry = _countries
+            .where((c) => c.code.toUpperCase() == issuingCode.toUpperCase())
+            .firstOrNull;
+      }
+
+      // Place of Issue Country → same as Nationality per spec
+      if (nationalityCode != null && nationalityCode.isNotEmpty) {
+        _selectedPlaceOfIssueCountry = _countries
+            .where((c) => c.code.toUpperCase() == nationalityCode.toUpperCase())
+            .firstOrNull;
+      }
+
       _dobCtrl.text = pick(['Guest_DOB', 'date_of_birth', 'dateOfBirth']) ?? '';
       _expiryDateCtrl.text =
           pick(['Guest_ExpiryDate', 'expiry_date', 'expiryDate']) ?? '';
       _issuingDateCtrl.text =
           pick(['Guest_DateOfIssue', 'date_of_issue', 'issueDate']) ?? '';
-      // Guest_City holds place of issue in this API
+      // Guest_City holds place of issue city in this API
       _placeOfIssueCtrl.text =
           pick([
             'Guest_City',
@@ -851,12 +871,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             .firstOrNull;
       }
 
-      // Arrived From Country — filled from the 'country' key in the API response
-      final arrivedCountry =
-          pick(['Guest_Country', 'Guest_CountryofIssue', 'countryCode']) ??
-          _issuingCountryCtrl.text;
-      if (arrivedCountry.isNotEmpty) {
-        _arrivedFromCountryCtrl.text = arrivedCountry;
+      // Arrived From Country → same as Guest_Nationality per spec
+      if (nationalityCode != null && nationalityCode.isNotEmpty) {
+        _selectedArrivedFromCountry = _countries
+            .where((c) => c.code.toUpperCase() == nationalityCode.toUpperCase())
+            .firstOrNull;
       }
 
       // API returns "Female" / "Male" — map to M / F
@@ -1165,13 +1184,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'guest_Lastname': _surnameCtrl.text,
         'guest_Father': _givenNamesCtrl.text,
         'guest_DocumentNo': _docNoCtrl.text,
-        'guest_CountryofIssue': _issuingCountryCtrl.text,
-        'guest_Nationality': _nationalityCtrl.text,
+        'guest_CountryofIssue': _selectedIssuingCountry?.code ?? '',
+        'guest_Nationality': _selectedNationality?.code ?? '',
+        'Guest_Country': _selectedNationality?.code ?? '',
         'guest_DOB': _dobCtrl.text,
         'guest_Gender': _sex,
         'guest_DateOfIssue': _issuingDateCtrl.text,
         'guest_ExpiryDate': _expiryDateCtrl.text,
         'Guest_POICity': _placeOfIssueCtrl.text,
+        'Guest_POICountry': _selectedPlaceOfIssueCountry?.code ?? '',
         'guest_Address': _addressCtrl.text,
         'Guest_Email': _emailCtrl.text,
         'Guest_PhoneNo': _phoneCtrl.text,
@@ -1182,7 +1203,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'Arrival_Time': _arrivalTimeCtrl.text,
         'Arrival_Date': _hotelArrivalDateCtrl.text,
         'Arrival_Time_Hotel': _hotelArrivalTimeCtrl.text,
-        'ArrivedFromCountry': _arrivedFromCountryCtrl.text,
+        'ArrivedFromCountry': _selectedArrivedFromCountry?.code ?? '',
         'ArrivedFromCity': _arrivedFromCityCtrl.text,
         'ArrivedFromPlace': _arrivedFromPlaceCtrl.text,
         'IntendedDurationStayIndividualHouse': _durationCtrl.text,
@@ -1209,6 +1230,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         body.addAll({
           'guest_VisaNo': _visaDocNoCtrl.text,
           'guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
+          'Guest_VisaPOICountry': _selectedVisaCountry?.code ?? '',
           'Guest_VisaPOICity': _visaPOICityCtrl.text,
           'guest_VisaDateofIssue': _visaIssuingDateCtrl.text,
           'guest_VisaValidTill': _visaExpiryDateCtrl.text,
@@ -1486,8 +1508,18 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _FormField(label: 'Surname', controller: _surnameCtrl),
         _FormField(label: 'Given Names', controller: _givenNamesCtrl),
         _FormField(label: 'Document Number', controller: _docNoCtrl),
-        _FormField(label: 'Issuing Country', controller: _issuingCountryCtrl),
-        _FormField(label: 'Nationality', controller: _nationalityCtrl),
+        _CountryDropdown(
+          label: 'Issuing Country',
+          countries: _countries,
+          selected: _selectedIssuingCountry,
+          onChanged: (c) => setState(() => _selectedIssuingCountry = c),
+        ),
+        _CountryDropdown(
+          label: 'Nationality',
+          countries: _countries,
+          selected: _selectedNationality,
+          onChanged: (c) => setState(() => _selectedNationality = c),
+        ),
         _DateField(
           label: 'Date of Birth',
           controller: _dobCtrl,
@@ -1536,7 +1568,16 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             }),
           ),
         ),
-        _FormField(label: 'Place of Issue', controller: _placeOfIssueCtrl),
+        _CountryDropdown(
+          label: 'Place of Issue (Country)',
+          countries: _countries,
+          selected: _selectedPlaceOfIssueCountry,
+          onChanged: (c) => setState(() => _selectedPlaceOfIssueCountry = c),
+        ),
+        _FormField(
+          label: 'Place of Issue (City)',
+          controller: _placeOfIssueCtrl,
+        ),
         _FormField(
           label: 'Address',
           controller: _addressCtrl,
@@ -1611,9 +1652,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           controller: _hotelArrivalTimeCtrl,
           keyboardType: TextInputType.datetime,
         ),
-        _FormField(
+        _CountryDropdown(
           label: 'Arrived From Country',
-          controller: _arrivedFromCountryCtrl,
+          countries: _countries,
+          selected: _selectedArrivedFromCountry,
+          onChanged: (c) => setState(() => _selectedArrivedFromCountry = c),
         ),
         _FormField(
           label: 'Arrived From City',

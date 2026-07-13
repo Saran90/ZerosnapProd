@@ -13,6 +13,20 @@ class PassportRepository {
     : _api = api ?? ApiBaseHelper(),
       _prefs = prefs ?? SharedPreferencesProvider();
 
+  /// Logs a long string in chunks to avoid truncation in the debug console.
+  void _logLong(String message, {String name = ''}) {
+    const chunkSize = 800;
+    for (var i = 0; i < message.length; i += chunkSize) {
+      dev.log(
+        message.substring(
+          i,
+          i + chunkSize > message.length ? message.length : i + chunkSize,
+        ),
+        name: name,
+      );
+    }
+  }
+
   Future<Map<String, String>> get _authHeaders async {
     final token = await _prefs.getAccessToken();
     return {'Authorization': 'Bearer $token'};
@@ -34,6 +48,7 @@ class PassportRepository {
         body: {'idbase64': frontBase64},
         headers: {...await _authHeaders, 'IntelliKey': apiKey},
       );
+      _logLong('extractPassport response: $response', name: 'PassportRepo');
       if (response is Map<String, dynamic>) return response;
       return null;
     } catch (e) {

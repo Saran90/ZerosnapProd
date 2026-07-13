@@ -766,10 +766,7 @@ class _CardScanPageState extends State<CardScanPage> {
                 _buildDetailsCard(),
                 const SizedBox(height: 16),
                 _buildStayCard(),
-                if (_showRoomNo == true) ...[
-                  const SizedBox(height: 16),
-                  _buildOtherDetailsCard(),
-                ],
+
                 const SizedBox(height: 16),
                 _buildSignatureCard(),
               ],
@@ -1064,24 +1061,6 @@ class _CardScanPageState extends State<CardScanPage> {
                 }),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOtherDetailsCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader(Icons.info_outline, 'OTHER DETAILS'),
-            const SizedBox(height: 20),
-            _FormField(label: 'Room Number', controller: _roomNoCtrl),
           ],
         ),
       ),
