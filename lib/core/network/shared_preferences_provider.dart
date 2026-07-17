@@ -175,6 +175,40 @@ class SharedPreferencesProvider {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyFrroDistrictId) ?? '';
   }
+
+  // ── Mobile settings (from /api/GetSettingMobile) ─────────────────────────
+  /// Persist the mobile settings returned by `/api/GetSettingMobile`.
+  /// Uses the same keys as the login session so downstream code (which reads
+  /// these flags via [getLoginSession]) automatically picks up the latest
+  /// values without requiring a re-login.
+  Future<void> saveMobileSettings(MobileSettings settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      if (settings.apiUrl.isNotEmpty)
+        prefs.setString(_keyApiUrl, settings.apiUrl),
+      prefs.setBool(_keyShowPrintMobileApp, settings.showPrintMobileApp),
+      prefs.setBool(_keyShowContactPerson, settings.showContactPersonToVisit),
+      prefs.setBool(_keyShowDepartment, settings.showDepartmentToVisit),
+      prefs.setBool(_keyShowVehicleType, settings.showVehicleType),
+      prefs.setBool(_keyShowVehicleNo, settings.showVehicleNo),
+      prefs.setBool(_keyShowRoomNo, settings.showRoomNo),
+      prefs.setBool(_keyShowGuestSignature, settings.showGuestSignature),
+      prefs.setBool(_keyShowFrroCheckOutInExt, settings.showFrroCheckOutInExt),
+      prefs.setBool(_keyShowNextDestination, settings.showNextDestination),
+      prefs.setBool(_keyShowFRROGuestListApp, settings.showFrroGuestListApp),
+      prefs.setBool(_keyScanByMrz, settings.scanByMrz),
+      // Derive the national/foreign card visibility from `ScanType`
+      // (1 = both, 2 = national only, 3 = foreign only, anything else = none)
+      prefs.setBool(
+        _keyShowScanNational,
+        settings.scanType == 1 || settings.scanType == 2,
+      ),
+      prefs.setBool(
+        _keyShowScanForeign,
+        settings.scanType == 1 || settings.scanType == 3,
+      ),
+    ]);
+  }
 }
 
 // ── Login session model ───────────────────────────────────────────────────────
@@ -228,4 +262,79 @@ class LoginSession {
     this.showFRROGuestListApp = false,
     this.scanByMrz = false, // default to OCR flow
   });
+}
+
+// ── Mobile settings model (from /api/GetSettingMobile) ──────────────────────
+/// Mobile settings returned by the backend's `/api/GetSettingMobile` endpoint.
+/// These are the same flags that arrive inside the login response's
+/// `setting` object — persisting them lets the app pick up new config
+/// values on every cold start (no re-login required).
+class MobileSettings {
+  final bool showPrintMobileApp;
+  final bool showContactPersonToVisit;
+  final bool showDepartmentToVisit;
+  final bool showVehicleType;
+  final bool showVehicleNo;
+  final bool showRoomNo;
+  final String apiUrl;
+  final int scanType; // 1 = both, 2 = national, 3 = foreign
+  final bool showGuestSignature;
+  final bool showFrroCheckOutInExt;
+  final bool scanByMrz;
+  final bool showNextDestination;
+  final bool showFrroGuestListApp;
+
+  const MobileSettings({
+    this.showPrintMobileApp = false,
+    this.showContactPersonToVisit = false,
+    this.showDepartmentToVisit = false,
+    this.showVehicleType = false,
+    this.showVehicleNo = false,
+    this.showRoomNo = false,
+    this.apiUrl = '',
+    this.scanType = 0,
+    this.showGuestSignature = false,
+    this.showFrroCheckOutInExt = false,
+    this.scanByMrz = false,
+    this.showNextDestination = false,
+    this.showFrroGuestListApp = false,
+  });
+
+  factory MobileSettings.fromJson(Map<String, dynamic> json) {
+    int asInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? 0;
+      return 0;
+    }
+
+    bool asBool(dynamic v) {
+      if (v == null) return false;
+      if (v is bool) return v;
+      if (v is int) return v == 1;
+      if (v is num) return v == 1;
+      if (v is String) {
+        final s = v.toLowerCase();
+        return s == '1' || s == 'true';
+      }
+      return false;
+    }
+
+    return MobileSettings(
+      showPrintMobileApp: asBool(json['ShowPrintMobileApp']),
+      showContactPersonToVisit: asBool(json['ShowContactPersonToVisit']),
+      showDepartmentToVisit: asBool(json['ShowDepartmentToVisit']),
+      showVehicleType: asBool(json['ShowVehicleType']),
+      showVehicleNo: asBool(json['ShowVehicleNo']),
+      showRoomNo: asBool(json['ShowRoomNo']),
+      apiUrl: json['apiurl'] as String? ?? '',
+      scanType: asInt(json['ScanType']),
+      showGuestSignature: asBool(json['ShowGuestSignature']),
+      showFrroCheckOutInExt: asBool(json['ShowFRROCheckOutInExt']),
+      scanByMrz: asBool(json['AppScanByMRZ']),
+      showNextDestination: asBool(json['ShowNextDestination']),
+      showFrroGuestListApp: asBool(json['ShowFRROGuestListApp']),
+    );
+  }
 }

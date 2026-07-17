@@ -47,6 +47,38 @@ class AuthRepository {
 
     return result;
   }
+
+  /// Fetches the latest mobile settings from `/api/GetSettingMobile` and
+  /// persists them locally. Should be called once on app launch (e.g. splash
+  /// screen) so any config change made on the server is picked up on the next
+  /// cold start — no re-login required.
+  ///
+  /// Requires a valid [baseUrl] and a previously persisted access token (the
+  /// API uses Bearer auth). If either is missing, the call is skipped and
+  /// previously stored settings remain in place.
+  Future<MobileSettings?> fetchAndSaveMobileSettings() async {
+    final baseUrl = await _prefs.getBaseUrl();
+    final token = await _prefs.getAccessToken();
+    if (baseUrl.isEmpty || token.isEmpty) {
+      return null;
+    }
+
+    final response =
+        await _api.get(
+              ApiConstants.getSettingMobile,
+              baseUrl: baseUrl,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+            )
+            as Map<String, dynamic>;
+
+    final settings = MobileSettings.fromJson(response);
+    await _prefs.saveMobileSettings(settings);
+    return settings;
+  }
 }
 
 // ── Login result ──────────────────────────────────────────────────────────────
@@ -90,7 +122,7 @@ class LoginResult {
         showPrintMobileApp: setting?['ShowPrintMobileApp'] == 1,
         showFrroCheckOutInExt: setting?['ShowFRROCheckOutInExt'] == 1,
         showNextDestination: setting?['ShowNextDestination'] == 1,
-        showFRROGuestListApp: false,
+        showFRROGuestListApp: setting?['ShowFRROGuestListApp'] == 1,
         scanByMrz:
             (json['AppScanByMRZ'] as int? ??
                 json['appScanByMRZ'] as int? ??

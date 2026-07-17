@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/widgets/version_text.dart';
+import '../../../auth/data/auth_repository.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -29,19 +32,44 @@ class _SplashPageState extends State<SplashPage>
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () async {
-      if (!mounted) return;
-      // If no domain saved yet, go to login; otherwise go to dashboard
-      final prefs = SharedPreferencesProvider();
-      final baseUrl = await prefs.getBaseUrl();
-      final token = await prefs.getAccessToken();
-      if (!mounted) return;
-      if (baseUrl.isEmpty || token.isEmpty) {
-        context.go(AppRoutes.login);
-      } else {
-        context.go(AppRoutes.dashboard);
-      }
-    });
+    // Fire the post-splash work as soon as the screen is up so the latest
+    // mobile settings from the server are fetched in parallel with the
+    // splash animation. We don't await it here — `_navigateNext` will
+    // await the result before deciding where to go.
+    unawaited(_bootstrap());
+  }
+
+  /// Performs startup work:
+  /// 1. Tries to refresh the mobile settings from `/api/GetSettingMobile`
+  ///    (only when the user is already logged in — i.e. a base URL + token
+  ///    exist). Failures are silently ignored so a flaky network never
+  ///    blocks the user from reaching the app.
+  /// 2. Once done, navigates to login (no session) or dashboard.
+  Future<void> _bootstrap() async {
+    final prefs = SharedPreferencesProvider();
+    final authRepo = AuthRepository(prefs: prefs);
+
+    // Refresh mobile settings from the server (only if we already have a
+    // logged-in session — this API requires Bearer auth).
+    try {
+      await authRepo.fetchAndSaveMobileSettings();
+    } catch (_) {
+      // Ignore — the locally cached settings (from the previous login)
+      // remain in place and the app stays usable.
+    }
+
+    // Small delay so the splash screen stays visible long enough to be seen.
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted) return;
+
+    final baseUrl = await prefs.getBaseUrl();
+    final token = await prefs.getAccessToken();
+    if (!mounted) return;
+    if (baseUrl.isEmpty || token.isEmpty) {
+      context.go(AppRoutes.login);
+    } else {
+      context.go(AppRoutes.dashboard);
+    }
   }
 
   @override
