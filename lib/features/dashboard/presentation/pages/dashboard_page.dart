@@ -1,13 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/version_text.dart';
 import '../widgets/scan_card_dialog.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  bool? _showFRROGuestListApp;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFRROGuestListAppVisibility();
+  }
+
+  /// Loads the ShowFRROGuestListApp flag from SharedPreferences.
+  /// When the value is 1 → true (show the GuestList button), else false.
+  Future<void> _loadFRROGuestListAppVisibility() async {
+    final session = await SharedPreferencesProvider().getLoginSession();
+    if (!mounted) return;
+    setState(() {
+      _showFRROGuestListApp = session?.showFRROGuestListApp ?? false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,12 +112,14 @@ class DashboardPage extends StatelessWidget {
 
                   const SizedBox(height: 32),
 
-                  _DashboardButton(
-                    label: 'Guest List',
-                    onTap: () => context.go(AppRoutes.guestList),
-                  ),
-
-                  const SizedBox(height: 14),
+                  // GuestList button - only shown if ShowFRROGuestListApp is enabled in settings
+                  if (_showFRROGuestListApp == true) ...[
+                    _DashboardButton(
+                      label: 'Guest List',
+                      onTap: () => context.go(AppRoutes.guestList),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
                   _DashboardButton(
                     label: 'Scan Card',

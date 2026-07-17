@@ -90,6 +90,7 @@ class LoginResult {
         showPrintMobileApp: setting?['ShowPrintMobileApp'] == 1,
         showFrroCheckOutInExt: setting?['ShowFRROCheckOutInExt'] == 1,
         showNextDestination: setting?['ShowNextDestination'] == 1,
+        showFRROGuestListApp: false,
         scanByMrz:
             (json['AppScanByMRZ'] as int? ??
                 json['appScanByMRZ'] as int? ??
