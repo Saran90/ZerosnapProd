@@ -14,7 +14,10 @@ import '../../domain/entities/lookup_models.dart';
 import '../../domain/entities/mrz_result.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
+import 'foreign_passport_scan_page.dart';
 import 'mrz_scanner_page.dart';
+import 'profile_crop_page.dart';
+import 'profile_photo_camera_page.dart';
 
 /// Passport flow from the "Choose Card" (National card) section.
 /// Mirrors the Android project's National card → Passport path:
@@ -23,6 +26,20 @@ class PassportCardScanPage extends StatefulWidget {
   /// When provided, the page will pre-fill the front image and immediately
   /// run OCR extraction — skipping the manual image capture step.
   final String? initialFrontImagePath;
+
+  /// Pre-filled back image path (from [ForeignPassportScanPage]).
+  final String? initialBackImagePath;
+
+  /// Pre-filled visa image path (from [ForeignPassportScanPage]).
+  final String? initialVisaImagePath;
+
+  /// When provided, these OCR results will be used to pre-fill the form
+  /// without running OCR again (from [ForeignPassportScanPage]).
+  final Map<String, dynamic>? initialPassportOcrData;
+
+  /// When provided, these visa OCR results will be used to pre-fill the
+  /// visa section without running OCR again (from [ForeignPassportScanPage]).
+  final Map<String, dynamic>? initialVisaOcrData;
 
   /// When true, automatically opens the camera for the front image
   /// as soon as the page loads (user already chose Camera in the dialog).
@@ -39,6 +56,10 @@ class PassportCardScanPage extends StatefulWidget {
   const PassportCardScanPage({
     super.key,
     this.initialFrontImagePath,
+    this.initialBackImagePath,
+    this.initialVisaImagePath,
+    this.initialPassportOcrData,
+    this.initialVisaOcrData,
     this.autoOpenCamera = false,
     this.showVisaSection = true,
     this.pageTitle,
@@ -180,6 +201,53 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     _durationCtrl.addListener(_updateCheckoutDate);
     _hotelArrivalDateCtrl.addListener(_updateCheckoutDate);
 
+    // ── Pre-filled data from ForeignPassportScanPage ──────────────────────
+    // When all OCR data is already available (new 3-step camera flow),
+    // skip image capture and use the pre-filled data directly.
+    if (widget.initialPassportOcrData != null) {
+      // Set image paths
+      if (widget.initialFrontImagePath != null) {
+        _frontImagePath = widget.initialFrontImagePath!;
+        _profileImagePath = widget.initialFrontImagePath!;
+      }
+      if (widget.initialBackImagePath != null) {
+        _backImagePath = widget.initialBackImagePath!;
+      }
+      if (widget.initialVisaImagePath != null) {
+        _visaImagePath = widget.initialVisaImagePath!;
+      }
+      // Fill form fields after lookups are loaded
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // Wait for lookups to be available (up to 5s)
+        for (var i = 0; i < 50 && _countries.isEmpty; i++) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        if (!mounted) return;
+        _fillFromOcr(widget.initialPassportOcrData!);
+        if (widget.initialVisaOcrData != null) {
+          _fillVisaFromOcr(widget.initialVisaOcrData!);
+        }
+        // Auto-select e-Visa type to show visa section if visa image was captured
+        if (widget.initialVisaImagePath != null &&
+            widget.initialVisaOcrData != null &&
+            _visaType.isEmpty) {
+          setState(() {
+            _visaType = 'e-Visa';
+            _selectedDropVisaType = _visaDropTypes
+                .where((v) => v.visaId == 'EV')
+                .firstOrNull;
+            if (_countries.isNotEmpty) {
+              _selectedVisaCountry = _countries
+                  .where((c) => c.code == 'IND')
+                  .firstOrNull;
+            }
+          });
+        }
+      });
+      return; // skip the camera/gallery flow below
+    }
+
+    // ── Legacy flow (old camera/gallery path) ─────────────────────────────
     // If an image was pre-selected (e.g. from gallery in the dialog),
     // set it as the front image and offer to crop the profile photo.
     if (widget.initialFrontImagePath != null) {
@@ -488,33 +556,108 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   void _pickBackImage() {
-    _showImageSourceSheet(
-      title: 'Passport Back / Last Page (optional)',
-      onPicked: (source) async {
-        final path = await _captureImage(source);
-        if (path == null || !mounted) return;
-        final ok = await _showImagePreviewSheet(path, 'Passport Back');
-        if (!ok) return;
-        setState(() => _backImagePath = path);
-
-        // Re-extract with updated back image
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _extractPassportWithBackImage();
-      },
-    );
+    _retakeWithScanner(ScanRetakeTarget.passportBack);
   }
 
   void _pickProfileImage() {
-    _showImageSourceSheet(
-      title: 'Profile Photo',
-      onPicked: (source) async {
-        final path = await _captureImage(source);
-        if (path == null || !mounted) return;
-        final ok = await _showImagePreviewSheet(path, 'Profile Photo');
-        if (!ok) return;
-        setState(() => _profileImagePath = path);
-      },
+    if (_frontImagePath.isNotEmpty) {
+      // Front image exists — offer to crop from it or take a new photo
+      _showProfilePhotoOptions();
+    } else {
+      // No front image yet — open camera directly
+      _pickProfileImageFromSource();
+    }
+  }
+
+  /// Shows a bottom sheet with two choices when a passport front image exists:
+  ///   1. Crop from Passport — opens the crop tool on the front image
+  ///   2. Pick New Photo     — camera / gallery picker
+  void _showProfilePhotoOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Adjust Profile Photo',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Drag the box over the face — drag the corner dot to resize',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 20),
+
+              // Option 1 — Crop from passport front
+              _ProfileOption(
+                icon: Icons.crop,
+                title: 'Crop from Passport',
+                subtitle: 'Select the profile area from the captured passport',
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final cropped = await cropProfileFromCard(
+                    context,
+                    _frontImagePath,
+                  );
+                  if (cropped != null && mounted) {
+                    setState(() => _profileImagePath = cropped);
+                  }
+                },
+              ),
+
+              const Divider(height: 24),
+
+              // Option 2 — Pick a new photo from camera/gallery
+              _ProfileOption(
+                icon: Icons.add_photo_alternate_outlined,
+                title: 'Pick New Photo',
+                subtitle: 'Take a photo or choose from gallery',
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickProfileImageFromSource();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  /// Opens the dedicated profile photo camera page.
+  /// Returns when the user captures and confirms a photo (or cancels).
+  Future<void> _pickProfileImageFromSource() async {
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ProfilePhotoCameraPage()),
+    );
+    if (path != null && mounted) {
+      setState(() => _profileImagePath = path);
+    }
   }
 
   /// Handle tap on front image - allow updating and re-extract OCR
@@ -522,24 +665,69 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     if (_frontImagePath.isEmpty) {
       _pickFrontImage();
     } else {
-      // If front image already exists, allow user to update it
-      _showImageSourceSheet(
-        title: 'Update Passport Front',
-        onPicked: (source) async {
-          final path = await _captureImage(source);
-          if (path == null || !mounted) return;
-          final ok = await _showImagePreviewSheet(path, 'Passport Front');
-          if (!ok) return;
-          setState(() => _frontImagePath = path);
-          // Re-extract with updated front image (and existing back if available)
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (_backImagePath.isNotEmpty) {
-            await _extractPassportWithBackImage();
-          } else {
-            await _extractFromImage();
+      // Front image already captured — open single-step retake scanner
+      _retakeWithScanner(ScanRetakeTarget.passportFront);
+    }
+  }
+
+  // ── Retake via scanner ────────────────────────────────────────────────────
+  /// Opens [ForeignPassportScanPage] in single-step retake mode for [target].
+  /// On return, applies the new image path and OCR data back to this form.
+  Future<void> _retakeWithScanner(ScanRetakeTarget target) async {
+    final result = await Navigator.of(context).push<ScanRetakeResult>(
+      MaterialPageRoute(
+        builder: (_) => ForeignPassportScanPage(retakeTarget: target),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    switch (result.target) {
+      case ScanRetakeTarget.passportFront:
+        setState(() {
+          _frontImagePath = result.imagePath;
+          // Keep profile image in sync with the new front image
+          if (_profileImagePath.isEmpty) {
+            _profileImagePath = result.imagePath;
           }
-        },
-      );
+        });
+        if (result.ocrData != null) {
+          // Wait for lookups if they haven't loaded yet
+          for (var i = 0; i < 50 && _countries.isEmpty; i++) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+          if (mounted) _fillFromOcr(result.ocrData!);
+        }
+        break;
+
+      case ScanRetakeTarget.passportBack:
+        setState(() => _backImagePath = result.imagePath);
+        if (result.ocrData != null) {
+          for (var i = 0; i < 50 && _countries.isEmpty; i++) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+          if (mounted) {
+            // Merge back OCR — existing form values win on conflict
+            final merged = <String, dynamic>{
+              ...result.ocrData!,
+              // Re-read current text fields as "existing front values"
+              'Guest_Lastname': _surnameCtrl.text,
+              'Guest_Firstname': _givenNamesCtrl.text,
+              'Guest_DocumentNo': _docNoCtrl.text,
+            };
+            _fillFromOcr(merged);
+          }
+        }
+        break;
+
+      case ScanRetakeTarget.visa:
+        setState(() => _visaImagePath = result.imagePath);
+        if (result.ocrData != null) {
+          for (var i = 0; i < 50 && _countries.isEmpty; i++) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+          if (mounted) _fillVisaFromOcr(result.ocrData!);
+        }
+        break;
     }
   }
 
@@ -956,20 +1144,21 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   void _showVisaFrontSheet() {
-    _showImageSourceSheet(
-      title: _isOCI ? 'OCI Front' : 'Visa Image',
-      onPicked: (src) async {
-        final path = await _captureImage(src);
-        if (path != null && mounted) {
-          setState(() => _visaImagePath = path);
-          // Automatically extract visa details for e-Visa and Diplomat
-          if (_isEVisaOrDiplomat) {
-            await Future.delayed(const Duration(milliseconds: 500));
-            await _extractVisaFromImage();
+    if (_isEVisaOrDiplomat) {
+      // Use the camera scan page so the user gets the framed capture + auto OCR
+      _retakeWithScanner(ScanRetakeTarget.visa);
+    } else {
+      // OCI — plain image picker (no OCR needed for OCI front slot)
+      _showImageSourceSheet(
+        title: 'OCI Front',
+        onPicked: (src) async {
+          final path = await _captureImage(src);
+          if (path != null && mounted) {
+            setState(() => _visaImagePath = path);
           }
-        }
-      },
-    );
+        },
+      );
+    }
   }
 
   void _showVisaBackSheet() {
@@ -993,65 +1182,6 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   /// Extract visa data from the captured visa image using OCR
-  Future<void> _extractVisaFromImage() async {
-    if (_visaImagePath == null || _visaImagePath!.isEmpty) return;
-
-    setState(() => _isExtractingVisa = true);
-    try {
-      final visaBytes = await File(_visaImagePath!).readAsBytes();
-      final visaBase64 = base64Encode(visaBytes);
-      final response = await _repo.extractVisa(visaBase64: visaBase64);
-      if (!mounted) return;
-
-      if (response == null) {
-        _showSnack('Could not extract visa details. Please fill in manually.');
-        return;
-      }
-
-      // Check HTTP code — 200 means success
-      final code = response['code'] as int? ?? response['Code'] as int?;
-      if (code != null && code != 200) {
-        _showSnack(
-          response['message'] as String? ??
-              response['Message'] as String? ??
-              'Could not extract visa details. Please fill in manually.',
-        );
-        return;
-      }
-
-      // The actual visa data is in response['data'] with Guest_* keys
-      final nested = response['data'] ?? response['Data'];
-      if (nested is! Map<String, dynamic>) {
-        _showSnack(
-          response['message'] as String? ??
-              'Could not extract visa details. Please fill in manually.',
-        );
-        return;
-      }
-
-      _fillVisaFromOcr(nested);
-
-      // Check if anything was actually populated
-      final anyFilled =
-          _visaDocNoCtrl.text.isNotEmpty ||
-          _visaIssuingDateCtrl.text.isNotEmpty ||
-          _visaExpiryDateCtrl.text.isNotEmpty;
-
-      if (anyFilled) {
-        _showSnack('Visa details extracted successfully', isError: false);
-      } else {
-        _showSnack(
-          response['message'] as String? ??
-              'Could not extract visa details. Please fill in manually.',
-        );
-      }
-    } catch (e) {
-      if (mounted) _showSnack('Visa extraction failed: $e');
-    } finally {
-      if (mounted) setState(() => _isExtractingVisa = false);
-    }
-  }
-
   /// Fill visa fields from OCR extracted data
   void _fillVisaFromOcr(Map<String, dynamic> data) {
     // Helper to read a non-null, non-empty string from multiple key names
@@ -1925,7 +2055,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     VoidCallback onRemove,
   ) {
     return GestureDetector(
-      onTap: imagePath == null ? onTap : null,
+      onTap: onTap,
       child: Container(
         // Auto height when image is shown so full image is visible
         height: imagePath != null ? null : 90,
@@ -2088,6 +2218,70 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
 }
 
 // ── Reusable widgets ──────────────────────────────────────────────────────────
+
+/// A tappable option row used in the profile photo bottom sheet.
+class _ProfileOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _SectionLabel extends StatelessWidget {
   final String text;
