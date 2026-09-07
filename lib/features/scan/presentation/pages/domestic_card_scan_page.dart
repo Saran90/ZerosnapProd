@@ -502,8 +502,8 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
                 ),
               ),
 
-            // ── Skip button (back step only) ──────────────────────────────
-            if (isBack && !_isAnalysing)
+            // ── Skip button: full flow + back step only (not in retake mode)
+            if (isBack && !_isAnalysing && widget.retakeTarget == null)
               Positioned(
                 bottom: 100,
                 left: 20,
@@ -588,9 +588,10 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   }
 
   Widget _buildTopBar() {
-    final stepLabel =
-        'Step ${_currentStep.index + 1} of 2 · '
-        '${_currentStep.label(widget.cardType)}';
+    final stepLabel = widget.retakeTarget != null
+        ? 'Retake · ${_currentStep.label(widget.cardType)}'
+        : 'Step ${_currentStep.index + 1} of 2 · '
+              '${_currentStep.label(widget.cardType)}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       color: Colors.black.withValues(alpha: 0.55),
