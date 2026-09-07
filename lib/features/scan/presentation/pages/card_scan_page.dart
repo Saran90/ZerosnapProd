@@ -17,7 +17,19 @@ import 'profile_crop_page.dart';
 
 class CardScanPage extends StatefulWidget {
   final DomesticCardType cardType;
-  const CardScanPage({super.key, required this.cardType});
+
+  /// Pre-filled from [DomesticCardScanPage] — skips the auto-open sheet.
+  final String? initialFrontImagePath;
+  final String? initialBackImagePath;
+  final Map<String, dynamic>? initialOcrData;
+
+  const CardScanPage({
+    super.key,
+    required this.cardType,
+    this.initialFrontImagePath,
+    this.initialBackImagePath,
+    this.initialOcrData,
+  });
 
   @override
   State<CardScanPage> createState() => _CardScanPageState();
@@ -78,8 +90,24 @@ class _CardScanPageState extends State<CardScanPage> {
     _loadRoomNoVisibility();
     _checkoutCtrl.text = _fmt(_checkoutDate);
     _durationCtrl.addListener(_onDurationChanged);
-    // Auto-open
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showFrontImageSheet());
+
+    if (widget.initialFrontImagePath != null) {
+      // Pre-filled from DomesticCardScanPage — populate images and OCR data
+      _frontImagePath = widget.initialFrontImagePath!;
+      if (widget.initialBackImagePath != null) {
+        _backImagePath = widget.initialBackImagePath!;
+      }
+      if (widget.initialOcrData != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _fillFromOcr(widget.initialOcrData!);
+        });
+      }
+    } else {
+      // Legacy path — auto-open the image source sheet
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showFrontImageSheet(),
+      );
+    }
   }
 
   void _onDurationChanged() {

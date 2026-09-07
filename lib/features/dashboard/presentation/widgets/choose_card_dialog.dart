@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../scan/presentation/pages/card_scan_page.dart';
+import '../../../scan/presentation/pages/domestic_card_scan_page.dart';
 import '../../../scan/presentation/pages/domestic_passport_scan_page.dart';
 import '../../../scan/presentation/pages/mrz_scanner_page.dart';
 import '../../../scan/presentation/pages/passport_card_scan_page_domestic.dart';
@@ -323,12 +324,12 @@ class _ChooseCardDialog extends StatelessWidget {
             context,
             label: 'Driving License',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
+              Navigator.of(context).pop();
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CardScanPage(cardType: DomesticCardType.drivingLicense),
+                  builder: (_) => const DomesticCardScanPage(
+                    cardType: DomesticCardType.drivingLicense,
+                  ),
                 ),
               );
             },
@@ -337,12 +338,12 @@ class _ChooseCardDialog extends StatelessWidget {
             context,
             label: 'Aadhar',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
+              Navigator.of(context).pop();
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CardScanPage(cardType: DomesticCardType.aadhar),
+                  builder: (_) => const DomesticCardScanPage(
+                    cardType: DomesticCardType.aadhar,
+                  ),
                 ),
               );
             },
@@ -351,12 +352,12 @@ class _ChooseCardDialog extends StatelessWidget {
             context,
             label: 'Voters ID',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
+              Navigator.of(context).pop();
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CardScanPage(cardType: DomesticCardType.votersId),
+                  builder: (_) => const DomesticCardScanPage(
+                    cardType: DomesticCardType.votersId,
+                  ),
                 ),
               );
             },
@@ -365,12 +366,12 @@ class _ChooseCardDialog extends StatelessWidget {
             context,
             label: 'PAN Card',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
+              Navigator.of(context).pop();
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CardScanPage(cardType: DomesticCardType.panCard),
+                  builder: (_) => const DomesticCardScanPage(
+                    cardType: DomesticCardType.panCard,
+                  ),
                 ),
               );
             },
@@ -392,12 +393,12 @@ class _ChooseCardDialog extends StatelessWidget {
             context,
             label: 'Other ID',
             onTap: () {
-              final nav = Navigator.of(context);
-              nav.pop();
-              nav.push(
+              Navigator.of(context).pop();
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      CardScanPage(cardType: DomesticCardType.otherId),
+                  builder: (_) => const DomesticCardScanPage(
+                    cardType: DomesticCardType.otherId,
+                  ),
                 ),
               );
             },
