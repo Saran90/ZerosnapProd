@@ -32,7 +32,25 @@ extension _CardStepExt on _CardStep {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Result returned to CardScanPage
+// Retake API  (used when tapping existing images on CardScanPage)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum DomesticCardRetakeTarget { front, back }
+
+class DomesticCardRetakeResult {
+  final DomesticCardRetakeTarget target;
+  final String imagePath;
+  final Map<String, dynamic>? ocrData;
+
+  const DomesticCardRetakeResult({
+    required this.target,
+    required this.imagePath,
+    this.ocrData,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Result returned to CardScanPage  (full flow)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DomesticCardScanResult {
@@ -53,14 +71,22 @@ class DomesticCardScanResult {
 
 /// 2-step camera scan page for all domestic card types (DL, Aadhar, etc.).
 ///
-/// Step 1 – Front → OCR  (mandatory)
-/// Step 2 – Back  → OCR  (skippable)
+/// **Full flow** ([retakeTarget] == null):
+///   Step 1 – Front → OCR  (mandatory)
+///   Step 2 – Back  → OCR  (skippable)
+///   → [CardScanPage] with OCR data pre-filled.
 ///
-/// On completion → [CardScanPage] with OCR data pre-filled.
+/// **Retake mode** ([retakeTarget] != null):
+///   Captures only the specified step, pops with [DomesticCardRetakeResult].
 class DomesticCardScanPage extends StatefulWidget {
   final DomesticCardType cardType;
+  final DomesticCardRetakeTarget? retakeTarget;
 
-  const DomesticCardScanPage({super.key, required this.cardType});
+  const DomesticCardScanPage({
+    super.key,
+    required this.cardType,
+    this.retakeTarget,
+  });
 
   @override
   State<DomesticCardScanPage> createState() => _DomesticCardScanPageState();
@@ -75,7 +101,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   bool _cameraError = false;
 
   // ── State ──────────────────────────────────────────────────────────────────
-  _CardStep _currentStep = _CardStep.front;
+  late _CardStep _currentStep;
   bool _isCapturing = false;
   bool _isAnalysing = false;
   String _analysisLabel = 'Analysing document...';
@@ -99,6 +125,9 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   @override
   void initState() {
     super.initState();
+    _currentStep = widget.retakeTarget == DomesticCardRetakeTarget.back
+        ? _CardStep.back
+        : _CardStep.front;
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
   }
@@ -326,6 +355,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     setState(
       () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
     );
+    Map<String, dynamic>? data;
     try {
       final frontBase64 = base64Encode(await File(path).readAsBytes());
       final result = await _repo.extract(
@@ -334,16 +364,29 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       );
       if (!mounted) return;
       if (result.isSuccess && result.data != null) {
-        _ocrData = result.data;
+        data = result.data;
+        _ocrData = data;
       }
     } catch (_) {}
-    if (mounted) setState(() => _currentStep = _CardStep.back);
+    if (!mounted) return;
+    if (widget.retakeTarget != null) {
+      Navigator.of(context).pop(
+        DomesticCardRetakeResult(
+          target: DomesticCardRetakeTarget.front,
+          imagePath: path,
+          ocrData: data,
+        ),
+      );
+    } else {
+      setState(() => _currentStep = _CardStep.back);
+    }
   }
 
   Future<void> _runBackOcr(String path) async {
     setState(
       () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
     );
+    Map<String, dynamic>? data;
     try {
       final frontBase64 = _frontImagePath != null
           ? base64Encode(await File(_frontImagePath!).readAsBytes())
@@ -356,13 +399,24 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       );
       if (!mounted) return;
       if (result.isSuccess && result.data != null) {
-        // Merge — existing front OCR wins on conflict
+        data = result.data;
         _ocrData = _ocrData != null
-            ? <String, dynamic>{...result.data!, ..._ocrData!}
-            : result.data;
+            ? <String, dynamic>{...data!, ..._ocrData!}
+            : data;
       }
     } catch (_) {}
-    if (mounted) _navigateToForm();
+    if (!mounted) return;
+    if (widget.retakeTarget != null) {
+      Navigator.of(context).pop(
+        DomesticCardRetakeResult(
+          target: DomesticCardRetakeTarget.back,
+          imagePath: path,
+          ocrData: data,
+        ),
+      );
+    } else {
+      _navigateToForm();
+    }
   }
 
   // ── Skip back ──────────────────────────────────────────────────────────────

@@ -3,17 +3,16 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/image_crop_helper.dart';
-import '../../../../core/widgets/image_source_dialog.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
+import 'domestic_card_scan_page.dart';
 import 'profile_crop_page.dart';
+import 'profile_photo_camera_page.dart';
 
 class CardScanPage extends StatefulWidget {
   final DomesticCardType cardType;
@@ -37,7 +36,6 @@ class CardScanPage extends StatefulWidget {
 
 class _CardScanPageState extends State<CardScanPage> {
   final _repo = CardScanRepository();
-  final _picker = ImagePicker();
 
   // ── Images ────────────────────────────────────────────────────────────────
   String _frontImagePath = '';
@@ -161,232 +159,163 @@ class _CardScanPageState extends State<CardScanPage> {
 
   // ── Image capture ─────────────────────────────────────────────────────────
 
-  /// Shows source picker then captures front image.
-  /// After the card is cropped, immediately opens a second crop page
-  /// on the same cropped card image so the user can select the profile photo.
-  void _showFrontImageSheet() {
-    showImageSourceDialog(
-      context,
-      title: 'Front Image',
-      onPicked: (source) async {
-        final file = await _picker.pickImage(source: source, imageQuality: 80);
-        if (file == null) return;
-
-        final croppedFront = await cropImage(context, file.path);
-        if (croppedFront == null || !mounted) return;
-        setState(() => _frontImagePath = croppedFront);
-
-        final profilePath = await cropProfileFromCard(context, croppedFront);
-        if (profilePath != null && mounted) {
-          setState(() => _profileImagePath = profilePath);
-
-          // Ask user if they want to capture back image
-          await _offerBackImageCapture();
-        }
-      },
-    );
-  }
-
-  /// Ask user if they want to capture the back image after profile crop
-  Future<void> _offerBackImageCapture() async {
-    if (!mounted) return;
-    final captureBack = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Capture Back Image?',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'Do you want to capture the back image of the card? This can improve extraction accuracy.',
-          style: TextStyle(fontSize: 15),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[700],
-                    side: BorderSide(color: Colors.grey[300]!),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
-                    'No',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
-                    'Yes',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    if (captureBack == true && mounted) {
-      // Capture back image
-      await _captureBackImageAndExtract();
-    } else {
-      // User said no, extract with only front image
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _extract();
-    }
-  }
-
-  /// Capture back image and then automatically call OCR
-  Future<void> _captureBackImageAndExtract() async {
-    showImageSourceDialog(
-      context,
-      title: 'Back Image',
-      onPicked: (source) async {
-        final file = await _picker.pickImage(source: source, imageQuality: 80);
-        if (file == null) {
-          // User cancelled, extract with only front
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extract();
-          return;
-        }
-        final cropped = await cropImage(context, file.path);
-        if (cropped != null && mounted) {
-          setState(() => _backImagePath = cropped);
-          // Automatically extract details after back image is captured
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extract();
-        } else {
-          // Crop cancelled, extract with only front
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extract();
-        }
-      },
-    );
-  }
-
-  /// Handle tap on front image - allow updating and re-extract OCR
+  /// Front tile tap: first capture → scan page full flow;
+  /// already captured → retake via scan page (front step only).
   void _onFrontImageTap() {
     if (_frontImagePath.isEmpty) {
       _showFrontImageSheet();
     } else {
-      // If front image already exists, allow user to update it
-      showImageSourceDialog(
-        context,
-        title: 'Update Front Image',
-        onPicked: (source) async {
-          final file = await _picker.pickImage(
-            source: source,
-            imageQuality: 80,
-          );
-          if (file == null) return;
-          final cropped = await cropImage(context, file.path);
-          if (cropped != null && mounted) {
-            setState(() => _frontImagePath = cropped);
-            // Re-extract with updated front image (and existing back if available)
-            await Future.delayed(const Duration(milliseconds: 500));
-            await _extract();
-          }
-        },
-      );
+      _retakeWithScanner(DomesticCardRetakeTarget.front);
     }
   }
 
-  void _showProfileImageSheet() {
-    showImageSourceDialog(
-      context,
-      title: 'Profile Photo',
-      onPicked: (source) async {
-        final file = await _picker.pickImage(source: source, imageQuality: 80);
-        if (file == null) return;
-        final cropped = await cropImage(context, file.path);
-        if (cropped != null && mounted)
-          setState(() => _profileImagePath = cropped);
-      },
+  /// Initial front capture — opens the full 2-step scan page.
+  void _showFrontImageSheet() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => DomesticCardScanPage(cardType: widget.cardType),
+      ),
     );
   }
 
-  void _showBackImageSheet() {
-    showImageSourceDialog(
-      context,
-      title: 'Back Image (optional)',
-      onPicked: (source) async {
-        final file = await _picker.pickImage(source: source, imageQuality: 80);
-        if (file == null) return;
-        final cropped = await cropImage(context, file.path);
-        if (cropped != null && mounted) {
-          setState(() => _backImagePath = cropped);
-          // Re-extract with updated back image
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extract();
-        }
-      },
+  /// Profile tile tap: if front image exists show crop/take-new-photo
+  /// bottom sheet; otherwise open the dedicated profile camera directly.
+  void _showProfileImageSheet() {
+    if (_frontImagePath.isNotEmpty) {
+      _showProfilePhotoOptions();
+    } else {
+      _takeNewProfilePhoto();
+    }
+  }
+
+  /// Bottom sheet with two profile photo options (mirrors passport flow).
+  void _showProfilePhotoOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Adjust Profile Photo',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Drag the box over the face — drag the corner dot to resize',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 20),
+              _ProfileOption(
+                icon: Icons.crop,
+                title: 'Crop from Card',
+                subtitle:
+                    'Select the profile area from the captured card image',
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final cropped = await cropProfileFromCard(
+                    context,
+                    _frontImagePath,
+                  );
+                  if (cropped != null && mounted) {
+                    setState(() => _profileImagePath = cropped);
+                  }
+                },
+              ),
+              const Divider(height: 24),
+              _ProfileOption(
+                icon: Icons.add_photo_alternate_outlined,
+                title: 'Take New Photo',
+                subtitle: 'Use the camera to take a profile photo',
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _takeNewProfilePhoto();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  /// Opens the dedicated profile camera page (oval guide, no confirmation).
+  Future<void> _takeNewProfilePhoto() async {
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ProfilePhotoCameraPage()),
+    );
+    if (path != null && mounted) {
+      setState(() => _profileImagePath = path);
+    }
+  }
+
+  /// Back tile tap — always opens scan page in retake mode for back step.
+  void _showBackImageSheet() {
+    _retakeWithScanner(DomesticCardRetakeTarget.back);
+  }
+
+  /// Opens [DomesticCardScanPage] in single-step retake mode.
+  /// On return, applies image path + OCR data and re-runs extract if needed.
+  Future<void> _retakeWithScanner(DomesticCardRetakeTarget target) async {
+    final result = await Navigator.of(context).push<DomesticCardRetakeResult>(
+      MaterialPageRoute(
+        builder: (_) => DomesticCardScanPage(
+          cardType: widget.cardType,
+          retakeTarget: target,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    switch (result.target) {
+      case DomesticCardRetakeTarget.front:
+        setState(() => _frontImagePath = result.imagePath);
+        if (result.ocrData != null) _fillFromOcr(result.ocrData!);
+        break;
+      case DomesticCardRetakeTarget.back:
+        setState(() => _backImagePath = result.imagePath);
+        if (result.ocrData != null) {
+          // Merge — keep any existing front data, overlay back OCR
+          final merged = <String, dynamic>{
+            ...result.ocrData!,
+            // Re-read current text fields to preserve front values
+            'name_on_card': _firstNameCtrl.text.isNotEmpty
+                ? _firstNameCtrl.text
+                : result.ocrData!['name_on_card'],
+            'id_number': _docNoCtrl.text.isNotEmpty
+                ? _docNoCtrl.text
+                : result.ocrData!['id_number'],
+          };
+          _fillFromOcr(merged);
+        }
+        break;
+    }
   }
 
   // ── OCR Extract ───────────────────────────────────────────────────────────
-  Future<void> _extract() async {
-    if (_frontImagePath.isEmpty) {
-      _snack('Please capture the front image first');
-      return;
-    }
-    setState(() => _isExtracting = true);
-    try {
-      final frontBase64 = await CardScanRepository.toBase64(_frontImagePath);
-      final backBase64 = _backImagePath.isNotEmpty
-          ? await CardScanRepository.toBase64(_backImagePath)
-          : null;
-
-      final result = await _repo.extract(
-        frontBase64: frontBase64,
-        backBase64: backBase64,
-        cardType: widget.cardType.label,
-      );
-
-      if (result.isSuccess && result.data != null) {
-        _fillFromOcr(result.data!);
-        _snack('Extracted successfully', isError: false);
-        // Check for duplicate after OCR populates document number
-        if (mounted) {
-          await checkAndHandleDuplicate(
-            context,
-            documentNo: _docNoCtrl.text,
-            cardType: _guestCardType(),
-          );
-        }
-      } else {
-        _snack(
-          result.message.isNotEmpty ? result.message : 'Extraction failed',
-        );
-      }
-    } catch (e) {
-      _snack('Extraction failed: $e');
-    } finally {
-      if (mounted) setState(() => _isExtracting = false);
-    }
-  }
-
+  // ── OCR Extract ───────────────────────────────────────────────────────────
   /// Maps [DomesticCardType] to the Guest_CardType value expected by the API.
   String _guestCardType() {
     switch (widget.cardType) {
@@ -1384,6 +1313,71 @@ class _DropdownField extends StatelessWidget {
             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
             .toList(),
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// ── Profile option row (used in the bottom sheet) ─────────────────────────────
+
+class _ProfileOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF), size: 20),
+          ],
+        ),
       ),
     );
   }
