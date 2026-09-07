@@ -14,6 +14,7 @@ import '../../domain/entities/lookup_models.dart';
 import '../../domain/entities/mrz_result.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
+import 'domestic_passport_scan_page.dart';
 import 'foreign_passport_scan_page.dart';
 import 'mrz_scanner_page.dart';
 import 'profile_crop_page.dart';
@@ -674,9 +675,12 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   /// Opens [ForeignPassportScanPage] in single-step retake mode for [target].
   /// On return, applies the new image path and OCR data back to this form.
   Future<void> _retakeWithScanner(ScanRetakeTarget target) async {
+    // Use the domestic scanner (no visa step) when visa section is hidden
     final result = await Navigator.of(context).push<ScanRetakeResult>(
       MaterialPageRoute(
-        builder: (_) => ForeignPassportScanPage(retakeTarget: target),
+        builder: (_) => widget.showVisaSection
+            ? ForeignPassportScanPage(retakeTarget: target)
+            : DomesticPassportScanPage(retakeTarget: target),
       ),
     );
     if (result == null || !mounted) return;
