@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../../../core/config/api_constants.dart';
+import '../../../../core/models/save_result.dart';
 import '../../../../core/network/api_base_helper.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../domain/entities/lookup_models.dart';
@@ -62,7 +63,7 @@ class CardScanRepository {
   }
 
   // ── Save Indian Card ──────────────────────────────────────────────────────
-  Future<bool> saveIndianCard(Map<String, dynamic> body) async {
+  Future<SaveResult> saveIndianCard(Map<String, dynamic> body) async {
     final url = await _prefs.getBaseUrl();
     final response =
         await _api.post(
@@ -72,9 +73,7 @@ class CardScanRepository {
               headers: await _authHeaders,
             )
             as Map<String, dynamic>;
-    final status =
-        response['status'] as int? ?? response['Status'] as int? ?? 0;
-    return status == 1;
+    return SaveResult.fromJson(response);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

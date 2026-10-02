@@ -4,7 +4,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../../../core/network/shared_preferences_provider.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
@@ -631,24 +634,49 @@ class _CardScanPageState extends State<CardScanPage> {
         'GuestRoomNo': _roomNoCtrl.text,
       };
 
-      final success = await _repo.saveIndianCard(body);
+      final result = await _repo.saveIndianCard(body);
       if (!mounted) return;
-      if (success) {
+      if (result.isSuccess) {
         _snack(
           '${widget.cardType.label} submitted successfully',
           isError: false,
         );
-        // Navigate back to the previous page (dashboard)
         if (!mounted) return;
         Navigator.of(context).pop();
+      } else if (result.isSessionExpired) {
+        _handleSessionExpired();
       } else {
-        _snack('Submission failed. Please try again.');
+        // Status 0 — show the backend validation message directly
+        _snack(result.message);
       }
     } catch (e) {
       _snack('Submission failed: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _handleSessionExpired() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Session Expired'),
+        content: const Text(
+          'Your session has expired. Please log in again to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.go(AppRoutes.login);
+            },
+            child: const Text('Login'),
+          ),
+        ],
+      ),
+    );
   }
 
   bool _validate() {

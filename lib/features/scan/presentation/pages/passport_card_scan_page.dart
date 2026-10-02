@@ -5,7 +5,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../../../core/network/shared_preferences_provider.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
@@ -1424,21 +1427,46 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         '=========================================================================',
       );
 
-      final success = await _repo.savePassport(body);
+      final result = await _repo.savePassport(body);
       if (!mounted) return;
-      if (success) {
+      if (result.isSuccess) {
         _showSnack('Passport submitted successfully', isError: false);
-        // Navigate back to the previous page (dashboard)
         if (!mounted) return;
         Navigator.of(context).pop();
+      } else if (result.isSessionExpired) {
+        _handleSessionExpired();
       } else {
-        _showSnack('Submission failed. Please try again.');
+        // Status 0 — show the backend validation message directly
+        _showSnack(result.message);
       }
     } catch (e) {
       _showSnack('Submission failed: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _handleSessionExpired() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Session Expired'),
+        content: const Text(
+          'Your session has expired. Please log in again to continue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.go(AppRoutes.login);
+            },
+            child: const Text('Login'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
