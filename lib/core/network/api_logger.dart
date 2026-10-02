@@ -1,14 +1,29 @@
+import 'dart:convert';
 import 'dart:developer' as dev;
 
 /// Structured API logger.
-/// Logs requests and responses with timing, truncating large bodies
-/// (e.g. base64 image strings) so logs stay readable.
+///
+/// Logs the full URL, headers, request body, status code, and response body
+/// for every API call. Base64 image fields are replaced with a length
+/// placeholder to keep logs readable — everything else is logged in full.
 class ApiLogger {
-  static const int _maxBodyLength = 500;
+  /// Fields whose values are replaced with a length placeholder.
+  /// Add any other large-binary field names here.
+  static const List<String> _binaryFields = [
+    'frontBase64',
+    'backBase64',
+    'imageBase64',
+    'image',
+    'front_image',
+    'back_image',
+  ];
+
   static const String _tag = 'API';
 
   // Tracks in-flight request start times keyed by "$method $url"
   static final Map<String, DateTime> _timers = {};
+
+  // ── Request ───────────────────────────────────────────────────────────────
 
   /// Call before sending a request.
   static void logRequest({
@@ -20,20 +35,34 @@ class ApiLogger {
     _timers['$method $url'] = DateTime.now();
 
     final buf = StringBuffer();
-    buf.writeln('┌─── REQUEST ─────────────────────────────────');
+    buf.writeln(
+      '┌─── REQUEST ─────────────────────────────────────────────────',
+    );
     buf.writeln('│ $method  $url');
     if (headers != null && headers.isNotEmpty) {
       final safeHeaders = Map<String, String>.from(headers)
         ..updateAll((k, v) => k.toLowerCase() == 'authorization' ? '***' : v);
-      buf.writeln('│ Headers: $safeHeaders');
+      buf.writeln('│ Headers:');
+      safeHeaders.forEach((k, v) => buf.writeln('│   $k: $v'));
     }
     if (body != null && body.isNotEmpty) {
-      buf.writeln('│ Body: ${_truncate(_sanitiseBody(body).toString())}');
+      final sanitised = _sanitiseBody(body);
+      try {
+        final pretty = const JsonEncoder.withIndent('  ').convert(sanitised);
+        buf.writeln('│ Body:');
+        for (final line in pretty.split('\n')) {
+          buf.writeln('│   $line');
+        }
+      } catch (_) {
+        buf.writeln('│ Body: $sanitised');
+      }
     }
-    buf.write('└─────────────────────────────────────────────');
+    buf.write('└─────────────────────────────────────────────────────────────');
 
     dev.log(buf.toString(), name: _tag);
   }
+
+  // ── Response ──────────────────────────────────────────────────────────────
 
   /// Call after receiving a response.
   static void logResponse({
@@ -53,28 +82,43 @@ class ApiLogger {
     final icon = ok ? '✓' : '✗';
 
     final buf = StringBuffer();
-    buf.writeln('┌─── RESPONSE ────────────────────────────────');
+    buf.writeln(
+      '┌─── RESPONSE ────────────────────────────────────────────────',
+    );
     buf.writeln('│ $icon $statusCode  $method  $url  [$ms]');
     if (error != null) {
       buf.writeln('│ Error: $error');
+    } else if (body.isNotEmpty) {
+      buf.writeln('│ Body:');
+      // Pretty-print if JSON, otherwise dump raw.
+      try {
+        final decoded = jsonDecode(body);
+        final pretty = const JsonEncoder.withIndent('  ').convert(decoded);
+        for (final line in pretty.split('\n')) {
+          buf.writeln('│   $line');
+        }
+      } catch (_) {
+        // Not JSON — log as-is.
+        buf.writeln('│   $body');
+      }
     } else {
-      buf.writeln('│ Body: ${_truncate(body)}');
+      buf.writeln('│ Body: <empty>');
     }
-    buf.write('└─────────────────────────────────────────────');
+    buf.write('└─────────────────────────────────────────────────────────────');
 
     dev.log(buf.toString(), name: _tag, level: ok ? 0 : 1000);
   }
 
-  /// Replaces base64 / large string values with a placeholder.
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /// Replaces base64 / large binary values with a concise placeholder so logs
+  /// remain useful without megabytes of image data.
   static Map<String, dynamic> _sanitiseBody(Map<String, dynamic> body) {
     return body.map((k, v) {
-      if (v is String && v.length > _maxBodyLength) {
-        return MapEntry(k, '[${v.length} chars — truncated]');
+      if (v is String && _binaryFields.contains(k)) {
+        return MapEntry(k, '[base64 — ${v.length} chars]');
       }
       return MapEntry(k, v);
     });
   }
-
-  static String _truncate(String s) =>
-      s.length > _maxBodyLength ? '${s.substring(0, _maxBodyLength)}…' : s;
 }
