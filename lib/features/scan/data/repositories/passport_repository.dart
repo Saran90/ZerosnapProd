@@ -1,6 +1,7 @@
 import 'dart:developer' as dev;
 
 import '../../../../core/config/api_constants.dart';
+import '../../../../core/errors/exceptions.dart';
 import '../../../../core/models/save_result.dart';
 import '../../../../core/network/api_base_helper.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
@@ -52,6 +53,8 @@ class PassportRepository {
       _logLong('extractPassport response: $response', name: 'PassportRepo');
       if (response is Map<String, dynamic>) return response;
       return null;
+    } on UnauthorisedException {
+      rethrow; // let the redirect propagate — do not swallow session expiry
     } catch (e) {
       return {'message': e.toString(), 'error': true};
     }
@@ -75,6 +78,8 @@ class PassportRepository {
       );
       if (response is Map<String, dynamic>) return response;
       return null;
+    } on UnauthorisedException {
+      rethrow; // let the redirect propagate — do not swallow session expiry
     } catch (e) {
       return {'message': e.toString(), 'error': true};
     }

@@ -4,10 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:go_router/go_router.dart';
-
+import '../../../../core/errors/exceptions.dart';
+import '../../../../core/navigation/app_navigator.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
-import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
@@ -644,11 +643,14 @@ class _CardScanPageState extends State<CardScanPage> {
         if (!mounted) return;
         Navigator.of(context).pop();
       } else if (result.isSessionExpired) {
-        _handleSessionExpired();
+        await _handleSessionExpired();
       } else {
         // Status 0 — show the backend validation message directly
         _snack(result.message);
       }
+    } on UnauthorisedException {
+      // 401 from the server — show re-login sheet without losing form data.
+      await _handleSessionExpired();
     } catch (e) {
       _snack('Submission failed: $e');
     } finally {
@@ -656,27 +658,18 @@ class _CardScanPageState extends State<CardScanPage> {
     }
   }
 
-  void _handleSessionExpired() {
+  /// Shows the re-login bottom sheet in place.
+  /// The user can log in and then tap Submit again — all form data is intact.
+  Future<void> _handleSessionExpired() async {
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Session Expired'),
-        content: const Text(
-          'Your session has expired. Please log in again to continue.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              context.go(AppRoutes.login);
-            },
-            child: const Text('Login'),
-          ),
-        ],
-      ),
-    );
+    final loggedIn = await AppNavigator.handleUnauthorised(context);
+    if (!mounted) return;
+    if (!loggedIn) {
+      // User dismissed without logging in — let them know they need to log in
+      // to submit, but keep them on the form so nothing is lost.
+      _snack('Please log in to submit the form.');
+    }
+    // If loggedIn == true the user can simply tap Submit again.
   }
 
   bool _validate() {

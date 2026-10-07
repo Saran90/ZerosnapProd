@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -26,7 +27,9 @@ class ApiBaseHelper {
     ApiLogger.logRequest(method: 'GET', url: url, headers: mergedHeaders);
 
     try {
-      final response = await http.get(uri, headers: mergedHeaders);
+      final response = await http
+          .get(uri, headers: mergedHeaders)
+          .timeout(const Duration(seconds: 30));
       ApiLogger.logResponse(
         method: 'GET',
         url: url,
@@ -35,6 +38,15 @@ class ApiBaseHelper {
       );
       return _handleResponse(response);
     } on SocketException catch (e) {
+      ApiLogger.logResponse(
+        method: 'GET',
+        url: url,
+        statusCode: 0,
+        body: '',
+        error: e,
+      );
+      throw const NetworkException();
+    } on TimeoutException catch (e) {
       ApiLogger.logResponse(
         method: 'GET',
         url: url,
@@ -66,11 +78,9 @@ class ApiBaseHelper {
     );
 
     try {
-      final response = await http.post(
-        uri,
-        body: encodedBody,
-        headers: mergedHeaders,
-      );
+      final response = await http
+          .post(uri, body: encodedBody, headers: mergedHeaders)
+          .timeout(const Duration(seconds: 30));
       ApiLogger.logResponse(
         method: 'POST',
         url: url,
@@ -79,6 +89,15 @@ class ApiBaseHelper {
       );
       return _handleResponse(response);
     } on SocketException catch (e) {
+      ApiLogger.logResponse(
+        method: 'POST',
+        url: url,
+        statusCode: 0,
+        body: '',
+        error: e,
+      );
+      throw const NetworkException();
+    } on TimeoutException catch (e) {
       ApiLogger.logResponse(
         method: 'POST',
         url: url,
@@ -101,6 +120,11 @@ class ApiBaseHelper {
       case 400:
         throw ServerException('Bad request: ${response.body}');
       case 401:
+        // Token expired or invalid.
+        // Throws UnauthorisedException so the caller can decide how to handle
+        // it — form pages show an in-place re-login bottom sheet, other
+        // contexts surface it as an error message.
+        throw const UnauthorisedException();
       case 403:
         throw ServerException('Unauthorised: ${response.body}');
       default:

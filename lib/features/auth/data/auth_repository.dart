@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import '../../../core/config/api_constants.dart';
 import '../../../core/network/api_base_helper.dart';
 import '../../../core/network/shared_preferences_provider.dart';
@@ -31,6 +33,14 @@ class AuthRepository {
     String username,
     String password,
   ) async {
+    dev.log(
+      'AuthRepository.login: url=$url username="$username"',
+      name: 'AuthRepo',
+    );
+    dev.log(
+      '[AuthRepo] login() called — url=$url username="$username"',
+      name: 'AuthRepo',
+    );
     final response =
         await _api.get(
               ApiConstants.login,

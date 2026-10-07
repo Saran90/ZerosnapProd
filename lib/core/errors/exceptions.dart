@@ -29,3 +29,13 @@ class ValidationException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Thrown when the server returns HTTP 401 (Unauthorised).
+/// Handled centrally by [ApiBaseHelper] — triggers an automatic redirect
+/// to the login screen via [AppNavigator.redirectToLogin].
+class UnauthorisedException implements Exception {
+  const UnauthorisedException();
+
+  @override
+  String toString() => 'Session expired. Please log in again.';
+}
