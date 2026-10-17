@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../router/app_router.dart';
+import '../services/firebase_logger.dart';
 import '../widgets/session_expired_sheet.dart';
 
 /// A global [NavigatorKey] and session-expiry helpers.
@@ -43,6 +44,7 @@ class AppNavigator {
   static Future<void> redirectToLogin() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('authorization_token');
+    await FirebaseLogger.instance.clearContext();
 
     final router = navigatorKey.currentContext != null
         ? GoRouter.of(navigatorKey.currentContext!)

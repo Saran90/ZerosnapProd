@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../errors/exceptions.dart';
+import '../services/firebase_logger.dart';
 import 'api_logger.dart';
 
 /// HTTP helper — mirrors the Android project's ApiBaseHelper.
@@ -36,8 +37,8 @@ class ApiBaseHelper {
         statusCode: response.statusCode,
         body: response.body,
       );
-      return _handleResponse(response);
-    } on SocketException catch (e) {
+      return _handleResponse(response, url: url);
+    } on SocketException catch (e, stackTrace) {
       ApiLogger.logResponse(
         method: 'GET',
         url: url,
@@ -45,8 +46,9 @@ class ApiBaseHelper {
         body: '',
         error: e,
       );
+      FirebaseLogger.instance.logError(e, stackTrace, hint: 'GET $url');
       throw const NetworkException();
-    } on TimeoutException catch (e) {
+    } on TimeoutException catch (e, stackTrace) {
       ApiLogger.logResponse(
         method: 'GET',
         url: url,
@@ -54,6 +56,7 @@ class ApiBaseHelper {
         body: '',
         error: e,
       );
+      FirebaseLogger.instance.logError(e, stackTrace, hint: 'GET $url');
       throw const NetworkException();
     }
   }
@@ -87,8 +90,8 @@ class ApiBaseHelper {
         statusCode: response.statusCode,
         body: response.body,
       );
-      return _handleResponse(response);
-    } on SocketException catch (e) {
+      return _handleResponse(response, url: url);
+    } on SocketException catch (e, stackTrace) {
       ApiLogger.logResponse(
         method: 'POST',
         url: url,
@@ -96,8 +99,9 @@ class ApiBaseHelper {
         body: '',
         error: e,
       );
+      FirebaseLogger.instance.logError(e, stackTrace, hint: 'POST $url');
       throw const NetworkException();
-    } on TimeoutException catch (e) {
+    } on TimeoutException catch (e, stackTrace) {
       ApiLogger.logResponse(
         method: 'POST',
         url: url,
@@ -105,12 +109,13 @@ class ApiBaseHelper {
         body: '',
         error: e,
       );
+      FirebaseLogger.instance.logError(e, stackTrace, hint: 'POST $url');
       throw const NetworkException();
     }
   }
 
   // ── Response handler ──────────────────────────────────────────────────────
-  dynamic _handleResponse(http.Response response) {
+  dynamic _handleResponse(http.Response response, {String url = ''}) {
     switch (response.statusCode) {
       case 200:
       case 422:
@@ -118,19 +123,31 @@ class ApiBaseHelper {
         if (body.isEmpty) return null; // empty body → caller decides meaning
         return jsonDecode(body);
       case 400:
-        throw ServerException('Bad request: ${response.body}');
+        final ex = ServerException('Bad request: ${response.body}');
+        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 400: $url');
+        throw ex;
       case 401:
         // Token expired or invalid.
         // Throws UnauthorisedException so the caller can decide how to handle
         // it — form pages show an in-place re-login bottom sheet, other
         // contexts surface it as an error message.
-        throw const UnauthorisedException();
+        const ex = UnauthorisedException();
+        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 401: $url');
+        throw ex;
       case 403:
-        throw ServerException('Unauthorised: ${response.body}');
+        final ex = ServerException('Unauthorised: ${response.body}');
+        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 403: $url');
+        throw ex;
       default:
-        throw ServerException(
+        final ex = ServerException(
           'Server error ${response.statusCode}: ${response.body}',
         );
+        FirebaseLogger.instance.logError(
+          ex,
+          null,
+          hint: 'HTTP ${response.statusCode}: $url',
+        );
+        throw ex;
     }
   }
 }

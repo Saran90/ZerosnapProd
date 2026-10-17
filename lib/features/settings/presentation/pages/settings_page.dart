@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/services/firebase_logger.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/version_text.dart';
 
@@ -135,6 +136,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 // Restore the toggle preference too so it survives logout
                 await _prefs.saveClearUrlOnLogout(false);
               }
+              await FirebaseLogger.instance.clearContext();
               if (mounted) context.go(AppRoutes.login);
             },
             child: const Text('Logout', style: TextStyle(color: Colors.red)),
