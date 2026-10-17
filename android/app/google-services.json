@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "325373388791",
+    "project_id": "processfriendly-51420",
+    "storage_bucket": "processfriendly-51420.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:325373388791:android:22da9a6f889e95b9e2f0f2",
+        "android_client_info": {
+          "package_name": "com.intellilabs.processfriendly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYVXMK9GDpMFRcJu8mcFxJZ4rL5bMZBr8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
