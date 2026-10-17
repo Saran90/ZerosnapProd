@@ -124,7 +124,11 @@ class ApiBaseHelper {
         return jsonDecode(body);
       case 400:
         final ex = ServerException('Bad request: ${response.body}');
-        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 400: $url');
+        FirebaseLogger.instance.logError(
+          ex,
+          null,
+          hint: 'HTTP 400: $url | response: ${response.body}',
+        );
         throw ex;
       case 401:
         // Token expired or invalid.
@@ -132,11 +136,19 @@ class ApiBaseHelper {
         // it — form pages show an in-place re-login bottom sheet, other
         // contexts surface it as an error message.
         const ex = UnauthorisedException();
-        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 401: $url');
+        FirebaseLogger.instance.logError(
+          ex,
+          null,
+          hint: 'HTTP 401: $url | response: ${response.body}',
+        );
         throw ex;
       case 403:
         final ex = ServerException('Unauthorised: ${response.body}');
-        FirebaseLogger.instance.logError(ex, null, hint: 'HTTP 403: $url');
+        FirebaseLogger.instance.logError(
+          ex,
+          null,
+          hint: 'HTTP 403: $url | response: ${response.body}',
+        );
         throw ex;
       default:
         final ex = ServerException(
@@ -145,7 +157,8 @@ class ApiBaseHelper {
         FirebaseLogger.instance.logError(
           ex,
           null,
-          hint: 'HTTP ${response.statusCode}: $url',
+          hint:
+              'HTTP ${response.statusCode}: $url | response: ${response.body}',
         );
         throw ex;
     }

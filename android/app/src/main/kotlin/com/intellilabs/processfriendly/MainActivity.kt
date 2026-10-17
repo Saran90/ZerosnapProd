@@ -1,4 +1,4 @@
-package com.zerosnap.app
+package com.intellilabs.processfriendly
 
 import android.content.Context
 import io.flutter.embedding.android.FlutterActivity

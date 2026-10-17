@@ -53,23 +53,39 @@ class FirebaseLogger {
     );
 
     await FirebaseCrashlytics.instance.setUserIdentifier(_context.userEmail);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_email', _context.userEmail);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_username', _context.username);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('journey_name', _context.journeyName);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('screen_name', _context.screenName);
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_email',
+      _context.userEmail,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_username',
+      _context.username,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'journey_name',
+      _context.journeyName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'screen_name',
+      _context.screenName,
+    );
 
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'login_email', value: _context.userEmail);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'login_username', value: _context.username);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'journey_name', value: _context.journeyName);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'screen_name', value: _context.screenName);
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'login_email',
+      value: _context.userEmail,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'login_username',
+      value: _context.username,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'journey_name',
+      value: _context.journeyName,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'screen_name',
+      value: _context.screenName,
+    );
   }
 
   /// Clear all context (call on logout).
@@ -81,14 +97,22 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.setCustomKey('journey_name', '');
     await FirebaseCrashlytics.instance.setCustomKey('screen_name', '');
 
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'login_email', value: null);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'login_username', value: null);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'journey_name', value: null);
-    await FirebaseAnalytics.instance
-        .setUserProperty(name: 'screen_name', value: null);
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'login_email',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'login_username',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'journey_name',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'screen_name',
+      value: null,
+    );
   }
 
   /// Log a non-fatal error to Crashlytics and Analytics.
@@ -98,16 +122,30 @@ class FirebaseLogger {
     String? hint,
   }) async {
     final timestamp = DateTime.now().toUtc().toIso8601String();
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_email', _context.userEmail);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_username', _context.username);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('journey_name', _context.journeyName);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('screen_name', _context.screenName);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('timestamp', timestamp);
+    // Truncate to 100 chars — Analytics param values have a 100-char limit.
+    final errorMessage = _truncate(exception?.toString() ?? 'unknown error');
+
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_email',
+      _context.userEmail,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_username',
+      _context.username,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'journey_name',
+      _context.journeyName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'screen_name',
+      _context.screenName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey('timestamp', timestamp);
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'error_message',
+      errorMessage,
+    );
     if (hint != null) {
       await FirebaseCrashlytics.instance.setCustomKey('hint', hint);
     }
@@ -127,6 +165,8 @@ class FirebaseLogger {
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
         'timestamp': timestamp,
+        'error_message': errorMessage,
+        'is_fatal': 'false',
         if (hint != null) 'hint': hint,
       },
     );
@@ -139,16 +179,29 @@ class FirebaseLogger {
     String? hint,
   }) async {
     final timestamp = DateTime.now().toUtc().toIso8601String();
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_email', _context.userEmail);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('login_username', _context.username);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('journey_name', _context.journeyName);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('screen_name', _context.screenName);
-    await FirebaseCrashlytics.instance
-        .setCustomKey('timestamp', timestamp);
+    final errorMessage = _truncate(exception?.toString() ?? 'unknown error');
+
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_email',
+      _context.userEmail,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'login_username',
+      _context.username,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'journey_name',
+      _context.journeyName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'screen_name',
+      _context.screenName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey('timestamp', timestamp);
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'error_message',
+      errorMessage,
+    );
     if (hint != null) {
       await FirebaseCrashlytics.instance.setCustomKey('hint', hint);
     }
@@ -168,8 +221,17 @@ class FirebaseLogger {
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
         'timestamp': timestamp,
+        'error_message': errorMessage,
+        'is_fatal': 'true',
         if (hint != null) 'hint': hint,
       },
     );
   }
+
+  /// Truncates a string to 100 characters — the Firebase Analytics
+  /// parameter value limit.
+  String _truncate(String value, [int maxLength = 100]) =>
+      value.length <= maxLength
+      ? value
+      : '${value.substring(0, maxLength - 1)}…';
 }

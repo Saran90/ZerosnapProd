@@ -150,7 +150,7 @@ class _LoginPageState extends State<LoginPage> {
                       Center(
                         child: Image.asset(
                           'assets/icons/pf-logo-agent.png',
-                          height: 64,
+                          height: 100,
                           fit: BoxFit.contain,
                         ),
                       ),

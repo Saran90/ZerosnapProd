@@ -91,7 +91,7 @@ class _SplashPageState extends State<SplashPage>
               child: _useImageAssets
                   ? Image.asset(
                       'assets/icons/pf-logo-agent.png',
-                      width: 260,
+                      width: MediaQuery.of(context).size.width * 0.65,
                       fit: BoxFit.contain,
                     )
                   : const _ZeroSnapLogoWidget(),

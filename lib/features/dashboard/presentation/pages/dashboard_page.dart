@@ -106,7 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   // Logo
                   Image.asset(
                     'assets/icons/pf-logo-agent.png',
-                    height: 52,
+                    height: 90,
                     fit: BoxFit.contain,
                   ),
 
