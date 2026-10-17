@@ -149,7 +149,7 @@ class _LoginPageState extends State<LoginPage> {
                       // ── Logo ──────────────────────────────────────
                       Center(
                         child: Image.asset(
-                          'assets/icons/logo_zerosnap.png',
+                          'assets/icons/pf-logo-agent.png',
                           height: 64,
                           fit: BoxFit.contain,
                         ),
