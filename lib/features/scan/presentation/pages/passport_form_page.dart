@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/errors/exceptions.dart';
+import '../../../../core/navigation/app_navigator.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
@@ -881,20 +883,36 @@ class _PassportFormPageState extends State<PassportFormPage> {
         '=========================================================================',
       );
 
-      final success = await _repo.savePassport(body);
+      final result = await _repo.savePassport(body);
       if (!mounted) return;
-      if (success) {
+      if (result.isSuccess) {
         _showSnack('Passport submitted successfully', isError: false);
-        // Navigate back to the previous page (dashboard)
         if (!mounted) return;
         Navigator.of(context).pop();
+      } else if (result.isSessionExpired) {
+        await _handleSessionExpired();
       } else {
-        _showSnack('Submission failed. Please try again.');
+        // Status 0 — show the backend validation message directly
+        _showSnack(result.message);
       }
+    } on UnauthorisedException {
+      // 401 from the server — show re-login sheet without losing form data.
+      await _handleSessionExpired();
     } catch (e) {
       _showSnack('Submission failed: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  /// Shows the re-login bottom sheet in place.
+  /// The user can log in and then tap Submit again — all form data is intact.
+  Future<void> _handleSessionExpired() async {
+    if (!mounted) return;
+    final loggedIn = await AppNavigator.handleUnauthorised(context);
+    if (!mounted) return;
+    if (!loggedIn) {
+      _showSnack('Please log in to submit the form.');
     }
   }
 

@@ -1,5 +1,8 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
@@ -7,9 +10,21 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/cubit/theme_cubit.dart';
 import 'core/utils/app_version.dart';
 import 'features/frro/presentation/bloc/guest_list_bloc.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Pass all Flutter framework errors to Crashlytics
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  // Pass async/platform errors to Crashlytics
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
 
   // Initialize app version info
   await AppVersion.initialize();

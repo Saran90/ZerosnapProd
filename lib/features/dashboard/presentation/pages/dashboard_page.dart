@@ -105,8 +105,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   // Logo
                   Image.asset(
-                    'assets/icons/logo_zerosnap.png',
-                    height: 52,
+                    'assets/icons/pf-logo-agent.png',
+                    height: 90,
                     fit: BoxFit.contain,
                   ),
 

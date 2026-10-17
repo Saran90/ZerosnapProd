@@ -11,6 +11,7 @@ import '../../features/frro/domain/usecases/update_frro_submission_status.dart';
 import '../../features/frro/presentation/bloc/guest_list_bloc.dart';
 import '../network/api_base_helper.dart';
 import '../network/shared_preferences_provider.dart';
+import '../services/firebase_logger.dart';
 import '../theme/cubit/theme_cubit.dart';
 
 final sl = GetIt.instance;
@@ -23,6 +24,7 @@ Future<void> initDependencies() async {
   // Core
   sl.registerLazySingleton<ThemeCubit>(() => ThemeCubit(sl()));
   sl.registerLazySingleton<ApiBaseHelper>(() => ApiBaseHelper());
+  sl.registerLazySingleton<FirebaseLogger>(() => FirebaseLogger.instance);
 
   // FRRO Feature
   _initFrroFeature();

@@ -9,6 +9,7 @@ import '../../features/frro/presentation/pages/frro_list_page.dart';
 import '../../features/frro/presentation/pages/frro_form_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/settings/presentation/pages/frro_credentials_page.dart';
+import '../navigation/app_navigator.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -26,6 +27,7 @@ class AppRoutes {
 }
 
 final appRouter = GoRouter(
+  navigatorKey: AppNavigator.navigatorKey,
   initialLocation: AppRoutes.splash,
   routes: [
     GoRoute(

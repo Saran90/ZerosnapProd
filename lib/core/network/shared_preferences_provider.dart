@@ -184,8 +184,9 @@ class SharedPreferencesProvider {
   Future<void> saveMobileSettings(MobileSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await Future.wait([
-      if (settings.apiUrl.isNotEmpty)
-        prefs.setString(_keyApiUrl, settings.apiUrl),
+      // NOTE: apiUrl from GetSettingMobile is intentionally NOT saved here.
+      // The base URL is only ever written from the domain-entry screen after
+      // a successful verifyDomain call.
       prefs.setBool(_keyShowPrintMobileApp, settings.showPrintMobileApp),
       prefs.setBool(_keyShowContactPerson, settings.showContactPersonToVisit),
       prefs.setBool(_keyShowDepartment, settings.showDepartmentToVisit),

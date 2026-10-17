@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'passport_card_scan_page.dart';
+import 'domestic_passport_scan_page.dart';
 
-/// Passport card scan page for domestic card flow (without visa section).
-/// This is a wrapper around PassportCardScanPage with showVisaSection always set to false.
+/// Entry point for the Domestic Card → Passport scanning flow.
 ///
-/// Scenario: Domestic Card → Passport → OCR Flow
-/// Used when: User completes a domestic card (Aadhar, Driving License, etc.)
-/// Visa Section: Hidden (no visa needed for domestic residents)
+/// Opens [DomesticPassportScanPage] which handles 2-step capture
+/// (passport front → OCR → passport back → OCR) then navigates to
+/// PassportCardScanPage with the visa section hidden.
 class PassportCardScanPageDomestic extends StatelessWidget {
+  // Legacy params kept for API compatibility with choose_card_dialog.dart
   final String? initialFrontImagePath;
   final bool autoOpenCamera;
 
@@ -19,11 +19,6 @@ class PassportCardScanPageDomestic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PassportCardScanPage(
-      initialFrontImagePath: initialFrontImagePath,
-      autoOpenCamera: autoOpenCamera,
-      showVisaSection: false,
-      pageTitle: 'Passport',
-    );
+    return const DomesticPassportScanPage();
   }
 }

@@ -90,8 +90,8 @@ class _SplashPageState extends State<SplashPage>
             Center(
               child: _useImageAssets
                   ? Image.asset(
-                      'assets/icons/logo_zerosnap.png',
-                      width: 260,
+                      'assets/icons/pf-logo-agent.png',
+                      width: MediaQuery.of(context).size.width * 0.65,
                       fit: BoxFit.contain,
                     )
                   : const _ZeroSnapLogoWidget(),

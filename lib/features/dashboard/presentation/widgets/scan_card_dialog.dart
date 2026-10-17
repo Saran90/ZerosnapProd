@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../scan/presentation/pages/foreign_passport_scan_page.dart';
 import 'choose_card_dialog.dart';
 
 void showScanCardDialog(BuildContext context) {
@@ -50,7 +51,11 @@ class _ScanCardDialog extends StatelessWidget {
               label: 'Scan Foreign Passport',
               onTap: () {
                 Navigator.of(context).pop();
-                showPassportSourceDialog(context);
+                Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ForeignPassportScanPage(),
+                  ),
+                );
               },
             ),
           ],

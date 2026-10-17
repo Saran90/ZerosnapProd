@@ -1,6 +1,9 @@
+import 'dart:developer' as dev;
+
 import '../../../core/config/api_constants.dart';
 import '../../../core/network/api_base_helper.dart';
 import '../../../core/network/shared_preferences_provider.dart';
+import '../../../core/services/firebase_logger.dart';
 
 class AuthRepository {
   final ApiBaseHelper _api;
@@ -31,6 +34,14 @@ class AuthRepository {
     String username,
     String password,
   ) async {
+    dev.log(
+      'AuthRepository.login: url=$url username="$username"',
+      name: 'AuthRepo',
+    );
+    dev.log(
+      '[AuthRepo] login() called — url=$url username="$username"',
+      name: 'AuthRepo',
+    );
     final response =
         await _api.get(
               ApiConstants.login,
@@ -43,6 +54,12 @@ class AuthRepository {
 
     if (result.success && result.session != null) {
       await _prefs.saveLoginSession(result.session!);
+      FirebaseLogger.instance.setContext(
+        userEmail: result.session!.userEmail,
+        username: result.session!.username,
+        journeyName: 'login',
+        screenName: 'login_page',
+      );
     }
 
     return result;
