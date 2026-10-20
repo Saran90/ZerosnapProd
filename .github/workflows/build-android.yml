@@ -91,13 +91,17 @@ jobs:
             **Commit:** ${{ github.sha }}
             **Build Type:** ${{ inputs.build_type }}
             
-            ### Download APK
-            - [arm64-v8a (64-bit, recommended)](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}-${{ github.run_number }}/app-arm64-v8a-release.apk)
+            ### 📱 Quick Install via QR Code
+            Download the QR code image from the assets below, then scan it with your phone to download and install the APK directly.
             
-            ### Installation
+            ### 📥 Direct Download
+            - [Download APK (arm64-v8a, recommended for most phones)](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}-${{ github.run_number }}/app-arm64-v8a-release.apk)
+            
+            ### Installation Instructions
             1. Download the APK on your Android device
-            2. Enable "Install from Unknown Sources" in Settings
-            3. Open the downloaded APK and install
+            2. Enable "Install from Unknown Sources" in Settings → Security
+            3. Open the downloaded APK file
+            4. Tap "Install"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
@@ -110,27 +114,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qrencode
           
-          # Generate QR code as PNG
-          qrencode -o qr-code.png -s 10 -m 2 "$APK_URL"
+          # Generate QR code as PNG (larger size for better scanning)
+          qrencode -o qr-code-download.png -s 15 -m 4 "$APK_URL"
           
-          # Generate QR code as ASCII art for console
-          echo "## QR Code for APK Download" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          qrencode -t ANSI256 "$APK_URL" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Direct Download Link:**" >> $GITHUB_STEP_SUMMARY
-          echo "$APK_URL" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Scan the QR code above with your Android device to download and install the APK." >> $GITHUB_STEP_SUMMARY
+          # Also generate ASCII for logs
+          echo "QR Code generated for: $APK_URL"
+          qrencode -t ANSI256 "$APK_URL"
+      
+      - name: Upload QR Code to Release
+        if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
+          files: qr-code-download.png
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload QR Code as Artifact
         if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
           name: qr-code-v${{ steps.version.outputs.version }}
-          path: qr-code.png
+          path: qr-code-download.png
           retention-days: 30
       
       - name: Upload App Bundle artifact
@@ -150,7 +155,9 @@ jobs:
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ inputs.build_type }}" == "apk" ] || [ "${{ inputs.build_type }}" == "both" ]; then
-            echo "📱 **APK Download:** Check the QR code above or download from [Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+            echo "### 📱 Installation Options" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. **QR Code**: Download \`qr-code-download.png\` from [Release Assets](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}-${{ github.run_number }}) and scan with your phone" >> $GITHUB_STEP_SUMMARY
+            echo "2. **Direct Link**: [Download APK](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}-${{ github.run_number }}/app-arm64-v8a-release.apk)" >> $GITHUB_STEP_SUMMARY
+            echo "3. **Artifacts**: Download from the Artifacts section above" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 **Artifacts:** Available in the Artifacts section above" >> $GITHUB_STEP_SUMMARY
