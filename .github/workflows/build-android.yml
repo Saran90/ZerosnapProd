@@ -13,6 +13,9 @@ on:
           - appbundle
           - both
 
+permissions:
+  contents: write  # Required for creating releases
+
 jobs:
   build:
     name: Build Android Release
