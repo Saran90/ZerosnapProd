@@ -10,6 +10,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import 'card_scan_page.dart';
 
@@ -243,7 +244,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
           toolbarTitle: title,
           toolbarColor: Colors.black,
           toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: const Color(0xFFC8941A),
+          activeControlsWidgetColor: AppColors.accent,
           backgroundColor: Colors.black,
           initAspectRatio: CropAspectRatioPreset.ratio3x2,
           lockAspectRatio: false,
@@ -255,7 +256,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
             CropAspectRatioPreset.original,
           ],
           cropStyle: CropStyle.rectangle,
-          cropFrameColor: const Color(0xFFC8941A),
+          cropFrameColor: AppColors.accent,
           cropGridColor: Colors.white24,
         ),
         IOSUiSettings(
@@ -468,9 +469,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   Widget build(BuildContext context) {
     _lastScreenSize = MediaQuery.of(context).size;
     final isBack = _currentStep == _CardStep.back;
-    final bracketColor = isBack
-        ? const Color(0xFF4CAF50)
-        : const Color(0xFFC8941A);
+    final bracketColor = isBack ? const Color(0xFF4CAF50) : AppColors.accent;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -788,9 +787,7 @@ class _AnalysisCardState extends State<_AnalysisCard>
                           height: 16,
                           margin: const EdgeInsets.only(bottom: 4),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFC8941A,
-                            ).withValues(alpha: 0.7),
+                            color: AppColors.accent.withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),

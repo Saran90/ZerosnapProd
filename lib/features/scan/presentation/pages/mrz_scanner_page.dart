@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import 'package:mrzscanner_flutter/mrzscanner_constants.dart';
 import '../../domain/entities/mrz_result.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import 'passport_form_page_landing.dart';
 
@@ -251,7 +252,7 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: Color(0xFF29ABE2)),
+            const CircularProgressIndicator(color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
               widget.fromGallery
@@ -259,7 +260,7 @@ class _MrzScannerPageState extends State<MrzScannerPage> {
                   : 'Starting scanner...',
               style: const TextStyle(
                 fontSize: 15,
-                color: Color(0xFF2C3E50),
+                color: AppColors.primary,
                 fontWeight: FontWeight.w500,
               ),
             ),

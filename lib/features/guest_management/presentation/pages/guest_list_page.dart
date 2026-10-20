@@ -119,7 +119,7 @@ class _GuestListPageState extends State<_GuestListPageContent>
     if (_showCheckOut == null) return const Scaffold();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFDEEFF8),
+      backgroundColor: AppColors.primary.withValues(alpha: 0.08),
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -263,7 +263,7 @@ class _GuestListPageState extends State<_GuestListPageContent>
 
           // â”€â”€ Bottom buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Container(
-            color: const Color(0xFFDEEFF8),
+            color: AppColors.primary.withValues(alpha: 0.08),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -297,7 +297,7 @@ class _GuestListPageState extends State<_GuestListPageContent>
                   child: OutlinedButton(
                     onPressed: () => context.go(AppRoutes.dashboard),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2C3E50),
+                      foregroundColor: AppColors.primary,
                       side: const BorderSide(color: Colors.white, width: 1.5),
                       backgroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
@@ -579,13 +579,13 @@ class _GuestCardState extends State<_GuestCard> {
                     Container(
                       width: 48,
                       height: 48,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFCDE8F6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.person,
-                        color: Color(0xFF29ABE2),
+                        color: AppColors.accent,
                         size: 28,
                       ),
                     ),
@@ -599,7 +599,7 @@ class _GuestCardState extends State<_GuestCard> {
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF2C3E50),
+                              color: AppColors.primary,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -914,7 +914,7 @@ class _EmptyView extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF2C3E50),
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 8),

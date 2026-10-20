@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import '../../../../core/theme/app_colors.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile Photo Camera Page
@@ -364,10 +365,10 @@ class _ShutterBtn extends StatelessWidget {
         height: 68,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: busy ? Colors.grey : const Color(0xFFC8941A),
+          color: busy ? Colors.grey : AppColors.accent,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFC8941A).withValues(alpha: 0.45),
+              color: AppColors.accent.withValues(alpha: 0.45),
               blurRadius: 18,
               spreadRadius: 2,
             ),

@@ -163,7 +163,7 @@ class _LoginPageState extends State<LoginPage> {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w300,
-                          color: Color(0xFF2C3E50),
+                          color: AppColors.primary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -199,7 +199,7 @@ class _LoginPageState extends State<LoginPage> {
                             vertical: 11,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEAF7FD),
+                            color: AppColors.primary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: AppColors.primary.withValues(alpha: 0.3),
@@ -373,7 +373,7 @@ class _InputField extends StatelessWidget {
         obscureText: obscureText,
         textInputAction: textInputAction,
         onSubmitted: onSubmitted,
-        style: const TextStyle(fontSize: 15, color: Color(0xFF2C3E50)),
+        style: const TextStyle(fontSize: 15, color: AppColors.primary),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),

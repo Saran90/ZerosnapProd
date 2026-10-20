@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../scan/presentation/pages/foreign_passport_scan_page.dart';
 import 'choose_card_dialog.dart';
 
@@ -80,7 +81,7 @@ class _ScanIcon extends StatelessWidget {
 }
 
 class _ScanIconPainter extends CustomPainter {
-  static const _color = Color(0xFF29ABE2);
+  static const _color = AppColors.accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -181,11 +182,11 @@ class _ScanButton extends StatelessWidget {
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: const Color(0xFF29ABE2),
+          color: AppColors.accent,
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF29ABE2).withValues(alpha: 0.35),
+              color: AppColors.accent.withValues(alpha: 0.35),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),

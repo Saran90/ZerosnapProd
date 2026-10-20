@@ -115,7 +115,7 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.backgroundLight,
-        selectedColor: Color.fromRGBO(26, 115, 232, 0.15),
+        selectedColor: AppColors.accent.withValues(alpha: 0.15),
         labelStyle: AppTextStyles.labelSmall,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -235,7 +235,7 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surfaceDark,
-        selectedColor: Color.fromRGBO(74, 144, 226, 0.2),
+        selectedColor: AppColors.accentLight.withValues(alpha: 0.20),
         labelStyle: AppTextStyles.labelSmall,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),

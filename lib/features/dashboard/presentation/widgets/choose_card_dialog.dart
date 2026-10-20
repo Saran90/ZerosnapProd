@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../scan/presentation/pages/card_scan_page.dart';
 import '../../../scan/presentation/pages/domestic_card_scan_page.dart';
 import '../../../scan/presentation/pages/domestic_passport_scan_page.dart';
@@ -315,7 +316,7 @@ class _ChooseCardDialog extends StatelessWidget {
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF2C3E50),
+                color: AppColors.primary,
               ),
             ),
           ),
@@ -427,7 +428,7 @@ class _ChooseCardDialog extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF2C3E50),
+                color: AppColors.primary,
               ),
             ),
           ),
@@ -459,15 +460,15 @@ class _PassportOptionButton extends StatelessWidget {
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: filled ? const Color(0xFF29ABE2) : Colors.white,
+          color: filled ? AppColors.accent : Colors.white,
           borderRadius: BorderRadius.circular(30),
           border: filled
               ? null
-              : Border.all(color: const Color(0xFF29ABE2), width: 1.5),
+              : Border.all(color: AppColors.accent, width: 1.5),
           boxShadow: filled
               ? [
                   BoxShadow(
-                    color: const Color(0xFF29ABE2).withValues(alpha: 0.30),
+                    color: AppColors.accent.withValues(alpha: 0.30),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -480,7 +481,7 @@ class _PassportOptionButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: filled ? Colors.white : const Color(0xFF2C3E50),
+            color: filled ? Colors.white : AppColors.primary,
             letterSpacing: 0.3,
           ),
         ),
