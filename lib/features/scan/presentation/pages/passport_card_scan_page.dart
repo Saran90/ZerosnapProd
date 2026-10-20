@@ -1582,7 +1582,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           child: ElevatedButton(
             onPressed: _isSubmitting ? null : _submit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[700],
+              backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 52),
               shape: RoundedRectangleBorder(
