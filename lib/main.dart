@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:mrzscanner_flutter/mrzscanner_flutter.dart';
 import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -29,9 +28,6 @@ void main() async {
   // Initialize app version info
   await AppVersion.initialize();
 
-  Mrzflutterplugin.registerWithLicenceKey(
-    '328833D4810B7B5E68109F90F66321CF4E7D4AB588DB3E3331CAE99326E0852B013A7A2E837A9B494D4295783E1804B3',
-  );
   await initDependencies();
   runApp(const ZerosnapApp());
 }
