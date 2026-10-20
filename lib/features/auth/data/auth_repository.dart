@@ -140,12 +140,6 @@ class LoginResult {
         showFrroCheckOutInExt: setting?['ShowFRROCheckOutInExt'] == 1,
         showNextDestination: setting?['ShowNextDestination'] == 1,
         showFRROGuestListApp: setting?['ShowFRROGuestListApp'] == 1,
-        scanByMrz:
-            (json['AppScanByMRZ'] as int? ??
-                json['appScanByMRZ'] as int? ??
-                json['AppScanByMrz'] as int? ??
-                0) ==
-            1,
       );
     }
 

@@ -29,7 +29,6 @@ class SharedPreferencesProvider {
   static const _keyShowFrroCheckOutInExt = 'showFrroCheckOutInExt';
   static const _keyShowNextDestination = 'showNextDestination';
   static const _keyShowFRROGuestListApp = 'showFRROGuestListApp';
-  static const _keyScanByMrz = 'scanByMrz';
 
   // ── Logout behaviour ──────────────────────────────────────────────────────
   /// When true  → logout clears everything (including base URL) → domain entry screen.
@@ -107,7 +106,6 @@ class SharedPreferencesProvider {
       prefs.setBool(_keyShowFrroCheckOutInExt, session.showFrroCheckOutInExt),
       prefs.setBool(_keyShowNextDestination, session.showNextDestination),
       prefs.setBool(_keyShowFRROGuestListApp, session.showFRROGuestListApp),
-      prefs.setBool(_keyScanByMrz, session.scanByMrz),
     ]);
   }
 
@@ -138,7 +136,6 @@ class SharedPreferencesProvider {
       showFrroCheckOutInExt: prefs.getBool(_keyShowFrroCheckOutInExt) ?? false,
       showNextDestination: prefs.getBool(_keyShowNextDestination) ?? false,
       showFRROGuestListApp: prefs.getBool(_keyShowFRROGuestListApp) ?? false,
-      scanByMrz: prefs.getBool(_keyScanByMrz) ?? false,
     );
   }
 
@@ -197,7 +194,6 @@ class SharedPreferencesProvider {
       prefs.setBool(_keyShowFrroCheckOutInExt, settings.showFrroCheckOutInExt),
       prefs.setBool(_keyShowNextDestination, settings.showNextDestination),
       prefs.setBool(_keyShowFRROGuestListApp, settings.showFrroGuestListApp),
-      prefs.setBool(_keyScanByMrz, settings.scanByMrz),
       // Derive the national/foreign card visibility from `ScanType`
       // (1 = both, 2 = national only, 3 = foreign only, anything else = none)
       prefs.setBool(
@@ -236,7 +232,6 @@ class LoginSession {
   final bool showFrroCheckOutInExt;
   final bool showNextDestination;
   final bool showFRROGuestListApp;
-  final bool scanByMrz; // true = MRZ scanner, false = OCR API
 
   const LoginSession({
     required this.token,
@@ -261,7 +256,6 @@ class LoginSession {
     this.showFrroCheckOutInExt = false,
     this.showNextDestination = false,
     this.showFRROGuestListApp = false,
-    this.scanByMrz = false, // default to OCR flow
   });
 }
 
@@ -281,7 +275,6 @@ class MobileSettings {
   final int scanType; // 1 = both, 2 = national, 3 = foreign
   final bool showGuestSignature;
   final bool showFrroCheckOutInExt;
-  final bool scanByMrz;
   final bool showNextDestination;
   final bool showFrroGuestListApp;
 
@@ -296,7 +289,6 @@ class MobileSettings {
     this.scanType = 0,
     this.showGuestSignature = false,
     this.showFrroCheckOutInExt = false,
-    this.scanByMrz = false,
     this.showNextDestination = false,
     this.showFrroGuestListApp = false,
   });
@@ -333,7 +325,6 @@ class MobileSettings {
       scanType: asInt(json['ScanType']),
       showGuestSignature: asBool(json['ShowGuestSignature']),
       showFrroCheckOutInExt: asBool(json['ShowFRROCheckOutInExt']),
-      scanByMrz: asBool(json['AppScanByMRZ']),
       showNextDestination: asBool(json['ShowNextDestination']),
       showFrroGuestListApp: asBool(json['ShowFRROGuestListApp']),
     );

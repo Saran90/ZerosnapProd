@@ -91,7 +91,6 @@ class _FrroCredentialsPageState extends State<FrroCredentialsPage> {
           showGuestSignature: session.showGuestSignature,
           showPrintMobileApp: session.showPrintMobileApp,
           showFrroCheckOutInExt: session.showFrroCheckOutInExt,
-          scanByMrz: session.scanByMrz,
         );
 
         await _prefs.saveLoginSession(updatedSession);

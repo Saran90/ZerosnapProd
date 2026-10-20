@@ -680,14 +680,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.2.3"
-  mrzscanner_flutter:
-    dependency: "direct main"
-    description:
-      name: mrzscanner_flutter
-      sha256: "3a2c7c6acfebe711f73fc14b99844bef7c0e00e8d816ec75492664f33cb3d6b0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.17"
   nested:
     dependency: transitive
     description:

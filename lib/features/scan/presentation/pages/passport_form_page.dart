@@ -13,17 +13,12 @@ import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
-import '../../domain/entities/mrz_result.dart';
 import '../utils/date_validator.dart';
 import '../utils/image_converter.dart';
-import '../utils/request_body_logger.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
-import 'mrz_scanner_page.dart';
 
 class PassportFormPage extends StatefulWidget {
-  final MrzResult? scannedResult;
-
   /// When false, hides the visa section (used for domestic card flow).
   /// When true, shows the visa section (used for landing screen flow).
   final bool showVisaSection;
@@ -39,7 +34,6 @@ class PassportFormPage extends StatefulWidget {
 
   const PassportFormPage({
     super.key,
-    this.scannedResult,
     this.showVisaSection = true,
     this.pageTitle,
     this.initialPurposeOfVisitId,
@@ -126,7 +120,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
   String? _visaImageBackPath;
   String? _visaImageStampPath;
   String? _backImagePath;
-  MrzResult? _scannedVisa;
 
   bool _isSubmitting = false;
   bool _isLoading = true;
@@ -140,13 +133,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
   /// null = not yet loaded from prefs, true = show, false = hide
   bool? _showRoomNo;
 
-  static const _visaTypes = [
-    'MRZ Enable Visa',
-    'e-Visa',
-    'OCI',
-    'Diplomat',
-    'No Visa',
-  ];
+  static const _visaTypes = ['e-Visa', 'OCI', 'Diplomat', 'No Visa'];
 
   bool get _isOCI => _visaType == 'OCI';
   bool get _isEVisaOrDiplomat =>
@@ -212,16 +199,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
   }
 
   void _prefill() {
-    final r = widget.scannedResult;
-    if (r == null) return;
-    _surnameCtrl.text = r.surname ?? '';
-    _givenNamesCtrl.text = r.givenNames ?? '';
-    _docNoCtrl.text = r.documentNumber ?? '';
-    _dobCtrl.text = r.dateOfBirth ?? '';
-    _issuingDateCtrl.text = r.estIssuingDateReadable ?? '';
-    _expiryDateCtrl.text = r.expiryDate ?? '';
-    if (r.sex != null && ['M', 'F', 'O'].contains(r.sex)) _sex = r.sex!;
-    _portraitBase64 = r.portrait;
+    // No MRZ prefill - form starts empty
   }
 
   Future<void> _loadLookups() async {
@@ -247,24 +225,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
               .firstOrNull;
         }
 
-        final r = widget.scannedResult;
-        if (r != null) {
-          _selectedIssuingCountry = _countries
-              .where((c) => c.code == r.issuingCountry)
-              .firstOrNull;
-          _selectedNationality = _countries
-              .where(
-                (c) =>
-                    c.code == r.nationality ||
-                    c.name.toLowerCase() == (r.nationality ?? '').toLowerCase(),
-              )
-              .firstOrNull;
-
-          // Arrived From Country � pre-fill from passport's issuing country
-          if (_selectedIssuingCountry != null) {
-            _arrivedFromCountryCtrl.text = _selectedIssuingCountry!.name;
-          }
-        }
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
             .firstOrNull;
@@ -505,7 +465,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _visaImagePath = null;
       _visaImageBackPath = null;
       _visaImageStampPath = null;
-      _scannedVisa = null;
       _selectedVisaSubType = null;
       if ((_isOCI || _isEVisaOrDiplomat) && _countries.isNotEmpty) {
         _selectedVisaCountry = _countries
@@ -528,40 +487,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
       if (type == 'e-Visa') {
         _loadVisaSubTypes('EV');
       }
-    } else if (type == 'MRZ Enable Visa') {
-      Future.microtask(_scanVisa);
     }
-  }
-
-  Future<void> _scanVisa() async {
-    final result = await Navigator.of(context).push<MrzResult>(
-      MaterialPageRoute(
-        builder: (_) =>
-            const MrzScannerPage(title: 'Scan Visa', visaMode: true),
-      ),
-    );
-    if (result == null) {
-      if (mounted) setState(() => _visaType = '');
-      return;
-    }
-    setState(() {
-      _scannedVisa = result;
-      _visaDocNoCtrl.text = result.documentNumber ?? '';
-      _visaIssuingDateCtrl.text = result.estIssuingDateReadable ?? '';
-      _visaExpiryDateCtrl.text = result.expiryDate ?? '';
-      if (result.optionals != null && result.optionals!.isNotEmpty) {
-        _visaPOICityCtrl.text = result.optionals!;
-        // Arrived From City and Place � pre-fill from visa's POI city
-        _arrivedFromCityCtrl.text = result.optionals!;
-        _arrivedFromPlaceCtrl.text = result.optionals!;
-      }
-      _selectedVisaCountry = _countries
-          .where((c) => c.code == result.issuingCountry)
-          .firstOrNull;
-      _selectedVisaCountry ??= _countries
-          .where((c) => c.code == 'IND')
-          .firstOrNull;
-    });
   }
 
   /// Extract visa data from the captured visa image using OCR
@@ -663,8 +589,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   int _visaTypeInt() {
     switch (_visaType) {
-      case 'MRZ Enable Visa':
-        return 1;
       case 'e-Visa':
         return 2;
       case 'OCI':
@@ -718,10 +642,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         return false;
       }
     }
-    if (_visaType == 'MRZ Enable Visa' && _scannedVisa == null) {
-      _showSnack('Please scan a visa to continue');
-      return false;
-    }
+    // Removed MRZ Enable Visa validation
 
     // Validate visa issuing date
     final visaIssuingDateError = DateValidator.validateVisaIssuingDate(
@@ -811,7 +732,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'NextDestination_OUT_City': _nextDestCityCtrl.text,
         'NextDestination_OUT_Place': _nextDestPlaceOutsideCtrl.text,
         // Images
-        'passportFile': widget.scannedResult?.fullImage ?? '',
+        'passportFile': '',
         'passportBackFile': _toBase64FromPath(_backImagePath) ?? '',
         'profileImageFile': _portraitBase64 ?? '',
         'User_Signature': _signatureBytes != null
@@ -838,8 +759,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
           body['visaFile'] = _toBase64FromPath(_visaImagePath) ?? '';
           body['visaFile2'] = _toBase64FromPath(_visaImageBackPath) ?? '';
           body['visaFile3'] = _toBase64FromPath(_visaImageStampPath) ?? '';
-        } else if (_visaType == 'MRZ Enable Visa') {
-          body['visaFile'] = _scannedVisa?.fullImage ?? '';
         }
       }
 

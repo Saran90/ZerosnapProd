@@ -38,22 +38,6 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
       
-      - name: Patch mrzscanner_flutter namespace
-        run: |
-          MRZ_BUILD_GRADLE="$HOME/.pub-cache/hosted/pub.dev/mrzscanner_flutter-1.0.17/android/build.gradle"
-          if [ -f "$MRZ_BUILD_GRADLE" ]; then
-            # Check if namespace is already defined
-            if ! grep -q "namespace" "$MRZ_BUILD_GRADLE"; then
-              # Add namespace after 'android {' line
-              sed -i '/^android {/a\    namespace "com.example.mrzscanner_flutter"' "$MRZ_BUILD_GRADLE"
-              echo "✅ Added namespace to mrzscanner_flutter build.gradle"
-            else
-              echo "✅ Namespace already exists in mrzscanner_flutter"
-            fi
-          else
-            echo "⚠️  mrzscanner_flutter build.gradle not found at expected path"
-          fi
-      
       - name: Run code generation (if needed)
         run: |
           if grep -q "build_runner" pubspec.yaml; then

@@ -32,9 +32,6 @@ dependencies:
   # SVG support
   flutter_svg: ^2.0.10+1
 
-  # MRZ Scanner
-  mrzscanner_flutter: ^1.0.0
-
   # QR/Barcode scanner for Aadhar, PAN, Voters ID
   mobile_scanner: ^5.2.3
 
