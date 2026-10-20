@@ -309,7 +309,7 @@ class _ChooseCardDialog extends StatelessWidget {
           // ── Header ──────────────────────────────────────────────
           Container(
             width: double.infinity,
-            color: const Color(0xFFDCF0FA),
+            color: AppColors.primary.withValues(alpha: 0.08),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             child: const Text(
               'Choose Card',

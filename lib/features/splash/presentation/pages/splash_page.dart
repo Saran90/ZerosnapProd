@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/version_text.dart';
 import '../../../auth/data/auth_repository.dart';
 
@@ -169,7 +170,7 @@ class _ZeroSnapLogoWidget extends StatelessWidget {
               style: TextStyle(
                 fontSize: 36,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF29ABE2),
+                color: AppColors.accent,
                 letterSpacing: -0.5,
               ),
             ),
@@ -181,7 +182,7 @@ class _ZeroSnapLogoWidget extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF29ABE2),
+            color: AppColors.accent,
             letterSpacing: 0.2,
           ),
         ),
@@ -222,7 +223,7 @@ class _ZIconPainter extends CustomPainter {
     canvas.drawPath(goldPath, goldPaint);
 
     final bluePaint = Paint()
-      ..color = const Color(0xFF29ABE2)
+      ..color = AppColors.accent
       ..style = PaintingStyle.fill;
 
     // ── Blue top-left rounded cap ──────────────────────────────────

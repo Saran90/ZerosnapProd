@@ -2423,7 +2423,7 @@ class _ImagePreviewSheet extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF2C3E50),
+                  color: AppColors.primary,
                 ),
               ),
             ),
