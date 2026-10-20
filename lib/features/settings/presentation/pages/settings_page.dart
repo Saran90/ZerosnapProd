@@ -198,7 +198,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF2C3E50),
+                                color: AppColors.primary,
                               ),
                             ),
                             if (_hotelName.isNotEmpty) ...[
@@ -409,7 +409,7 @@ class _SettingsTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: titleColor ?? const Color(0xFF2C3E50),
+                      color: titleColor ?? AppColors.primary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -480,7 +480,7 @@ class _ToggleTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF2C3E50),
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 2),

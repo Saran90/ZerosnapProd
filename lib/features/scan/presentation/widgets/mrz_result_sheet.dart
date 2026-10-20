@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/mrz_result.dart';
 
 class MrzResultSheet extends StatelessWidget {
@@ -47,7 +48,7 @@ class MrzResultSheet extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.check_circle,
-                    color: Color(0xFF29ABE2),
+                    color: AppColors.accent,
                     size: 24,
                   ),
                   const SizedBox(width: 8),
@@ -142,8 +143,8 @@ class MrzResultSheet extends StatelessWidget {
                         icon: const Icon(Icons.refresh),
                         label: const Text('Rescan'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF29ABE2),
-                          side: const BorderSide(color: Color(0xFF29ABE2)),
+                          foregroundColor: AppColors.accent,
+                          side: const BorderSide(color: AppColors.accent),
                           minimumSize: const Size(0, 48),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -158,7 +159,7 @@ class MrzResultSheet extends StatelessWidget {
                         icon: const Icon(Icons.check),
                         label: const Text('Confirm'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF29ABE2),
+                          backgroundColor: AppColors.accent,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(0, 48),
                           elevation: 0,
@@ -199,7 +200,7 @@ class _PortraitImage extends StatelessWidget {
         height: 120,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF29ABE2), width: 2),
+          border: Border.all(color: AppColors.accent, width: 2),
         ),
         clipBehavior: Clip.antiAlias,
         child: Image.memory(bytes, fit: BoxFit.cover),
@@ -240,7 +241,7 @@ class _ResultRow extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF2C3E50),
+                color: AppColors.primary,
               ),
             ),
           ),

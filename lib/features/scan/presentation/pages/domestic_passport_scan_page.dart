@@ -10,6 +10,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../data/repositories/passport_repository.dart';
+import '../../../../core/theme/app_colors.dart';
 import 'foreign_passport_scan_page.dart';
 import 'passport_card_scan_page.dart';
 
@@ -221,7 +222,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
           toolbarTitle: title,
           toolbarColor: Colors.black,
           toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: const Color(0xFFC8941A),
+          activeControlsWidgetColor: AppColors.accent,
           backgroundColor: Colors.black,
           initAspectRatio: CropAspectRatioPreset.ratio3x2,
           lockAspectRatio: false,
@@ -233,7 +234,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
             CropAspectRatioPreset.original,
           ],
           cropStyle: CropStyle.rectangle,
-          cropFrameColor: const Color(0xFFC8941A),
+          cropFrameColor: AppColors.accent,
           cropGridColor: Colors.white24,
         ),
         IOSUiSettings(
@@ -447,9 +448,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
 
     // Step indicator colour: golden for front, green for back
     final isBack = _currentStep == _DomStep.passportBack;
-    final bracketColor = isBack
-        ? const Color(0xFF4CAF50)
-        : const Color(0xFFC8941A);
+    final bracketColor = isBack ? const Color(0xFF4CAF50) : AppColors.accent;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -641,7 +640,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
         _ShutterBtn(
           onTap: _onShutterPressed,
           isCapturing: _isCapturing,
-          color: isBack ? const Color(0xFF4CAF50) : const Color(0xFFC8941A),
+          color: isBack ? const Color(0xFF4CAF50) : AppColors.accent,
         ),
       ],
     );
@@ -777,9 +776,7 @@ class _AnalysisCardState extends State<_AnalysisCard>
                           height: 16,
                           margin: const EdgeInsets.only(bottom: 4),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFC8941A,
-                            ).withValues(alpha: 0.7),
+                            color: AppColors.accent.withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),

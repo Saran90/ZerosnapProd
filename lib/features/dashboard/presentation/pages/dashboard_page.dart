@@ -174,15 +174,18 @@ class _PlaceholderHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFD6EAF8), Color(0xFFAED6F1)],
+          colors: [
+            AppColors.primary.withValues(alpha: 0.12),
+            AppColors.primary.withValues(alpha: 0.20),
+          ],
         ),
       ),
       child: const Center(
-        child: Icon(Icons.person, size: 100, color: Color(0xFF5DADE2)),
+        child: Icon(Icons.person, size: 100, color: AppColors.primaryLight),
       ),
     );
   }
@@ -203,11 +206,11 @@ class _DashboardButton extends StatelessWidget {
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: const Color(0xFF29ABE2),
+          color: AppColors.accent,
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF29ABE2).withValues(alpha: 0.35),
+              color: AppColors.accent.withValues(alpha: 0.35),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),

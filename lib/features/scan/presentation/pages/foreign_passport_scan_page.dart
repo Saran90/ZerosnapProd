@@ -264,7 +264,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           toolbarTitle: title,
           toolbarColor: Colors.black,
           toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: const Color(0xFFC8941A),
+          activeControlsWidgetColor: AppColors.accent,
           backgroundColor: Colors.black,
           // Start with landscape passport ratio (3:2) — matches screenshot pill
           initAspectRatio: CropAspectRatioPreset.ratio3x2,
@@ -278,7 +278,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             CropAspectRatioPreset.original,
           ],
           cropStyle: CropStyle.rectangle,
-          cropFrameColor: const Color(0xFFC8941A),
+          cropFrameColor: AppColors.accent,
           cropGridColor: Colors.white24,
         ),
         IOSUiSettings(
@@ -595,7 +595,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             child: ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(_VisaErrorAction.retake),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC8941A),
+                backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -684,6 +684,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           initialVisaImagePath: _visaImagePath,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
+          skipExtraction: true,
         ),
       ),
     );
@@ -923,7 +924,7 @@ class _ScanOverlay extends StatelessWidget {
     // Choose bracket colour per step
     final bracketColor = step == _ScanStep.passportBack
         ? const Color(0xFF4CAF50) // green for back page
-        : const Color(0xFFC8941A); // golden for front / visa
+        : AppColors.accent; // golden for front / visa
 
     return Stack(
       children: [
@@ -1116,9 +1117,7 @@ class _AnalysisCardState extends State<_AnalysisCard>
                           height: 16,
                           margin: const EdgeInsets.only(bottom: 4),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFC8941A,
-                            ).withValues(alpha: 0.7),
+                            color: AppColors.accent.withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -1338,7 +1337,7 @@ class _ShutterButton extends StatelessWidget {
 
   Color get _color {
     if (step == _ScanStep.passportBack) return const Color(0xFF4CAF50);
-    return const Color(0xFFC8941A);
+    return AppColors.accent;
   }
 
   @override

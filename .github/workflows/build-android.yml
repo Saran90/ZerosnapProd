@@ -1,0 +1,89 @@
+name: Build Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - appbundle
+          - both
+
+jobs:
+  build:
+    name: Build Android Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+      
+      - name: Get Flutter dependencies
+        run: flutter pub get
+      
+      - name: Run code generation (if needed)
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          fi
+      
+      - name: Build APK
+        if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
+        run: flutter build apk --release --split-per-abi
+      
+      - name: Build App Bundle
+        if: ${{ inputs.build_type == 'appbundle' || inputs.build_type == 'both' }}
+        run: flutter build appbundle --release
+      
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '\r')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Upload APK artifacts
+        if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-v${{ steps.version.outputs.version }}
+          path: |
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 30
+      
+      - name: Upload App Bundle artifact
+        if: ${{ inputs.build_type == 'appbundle' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-appbundle-v${{ steps.version.outputs.version }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+      
+      - name: Build summary
+        run: |
+          echo "### Build Completed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Type:** ${{ inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY

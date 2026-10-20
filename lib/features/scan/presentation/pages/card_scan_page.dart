@@ -815,7 +815,7 @@ class _CardScanPageState extends State<CardScanPage> {
                   child: ElevatedButton(
                     onPressed: _isVerifying ? null : _verify,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.error,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, 52),
                       shape: RoundedRectangleBorder(
@@ -845,7 +845,7 @@ class _CardScanPageState extends State<CardScanPage> {
                 child: ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
+                    backgroundColor: AppColors.accent,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(0, 52),
                     shape: RoundedRectangleBorder(

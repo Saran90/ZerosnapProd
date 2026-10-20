@@ -44,6 +44,10 @@ class PassportCardScanPage extends StatefulWidget {
   /// visa section without running OCR again (from [ForeignPassportScanPage]).
   final Map<String, dynamic>? initialVisaOcrData;
 
+  /// When true, skip all crop/extract flows and go straight to the form
+  /// with whatever data is already available (from ForeignPassportScanPage).
+  final bool skipExtraction;
+
   /// When true, automatically opens the camera for the front image
   /// as soon as the page loads (user already chose Camera in the dialog).
   final bool autoOpenCamera;
@@ -63,6 +67,7 @@ class PassportCardScanPage extends StatefulWidget {
     this.initialVisaImagePath,
     this.initialPassportOcrData,
     this.initialVisaOcrData,
+    this.skipExtraction = false,
     this.autoOpenCamera = false,
     this.showVisaSection = true,
     this.pageTitle,
@@ -205,9 +210,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     _hotelArrivalDateCtrl.addListener(_updateCheckoutDate);
 
     // ── Pre-filled data from ForeignPassportScanPage ──────────────────────
-    // When all OCR data is already available (new 3-step camera flow),
-    // skip image capture and use the pre-filled data directly.
-    if (widget.initialPassportOcrData != null) {
+    // When skipExtraction is true OR initialPassportOcrData is provided,
+    // skip image capture/crop/extract and use the pre-filled data directly.
+    if (widget.skipExtraction || widget.initialPassportOcrData != null) {
       // Set image paths
       if (widget.initialFrontImagePath != null) {
         _frontImagePath = widget.initialFrontImagePath!;
@@ -226,7 +231,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           await Future.delayed(const Duration(milliseconds: 100));
         }
         if (!mounted) return;
-        _fillFromOcr(widget.initialPassportOcrData!);
+        if (widget.initialPassportOcrData != null) {
+          _fillFromOcr(widget.initialPassportOcrData!);
+        }
         if (widget.initialVisaOcrData != null) {
           _fillVisaFromOcr(widget.initialVisaOcrData!);
         }
@@ -1582,7 +1589,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           child: ElevatedButton(
             onPressed: _isSubmitting ? null : _submit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[700],
+              backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 52),
               shape: RoundedRectangleBorder(
@@ -2423,7 +2430,7 @@ class _ImagePreviewSheet extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF2C3E50),
+                  color: AppColors.primary,
                 ),
               ),
             ),
