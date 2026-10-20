@@ -684,6 +684,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           initialVisaImagePath: _visaImagePath,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
+          skipExtraction: true,
         ),
       ),
     );
