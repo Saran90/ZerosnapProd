@@ -1,3 +1,4 @@
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
@@ -29,6 +30,7 @@ class AppRoutes {
 final appRouter = GoRouter(
   navigatorKey: AppNavigator.navigatorKey,
   initialLocation: AppRoutes.splash,
+  observers: [FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)],
   routes: [
     GoRoute(
       path: AppRoutes.splash,
