@@ -3,7 +3,7 @@ class ApiConstants {
 
   // Auth
   static const String verify = '/api/UrlValid';
-  static const String login = '/api/authenticate';
+  static const String login = '/api/MRZauthenticate';
   static const String checkApiAccess = '/api/CheckApiIsAccessible';
   static const String getSettingMobile = '/api/GetSettingMobile';
 
