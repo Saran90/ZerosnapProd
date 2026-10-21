@@ -1296,7 +1296,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           Text(
             widget.retakeTarget != null
                 ? 'Retake · ${_currentStep.label}'
-                : 'Step ${_currentStep.stepNumber} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
+                : 'Step ${_currentStep.stepNumber(_selectedVisaDocType)} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 17,
