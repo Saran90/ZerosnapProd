@@ -20,6 +20,9 @@ import 'passport_card_scan_page.dart';
 /// Which image was retaken in single-step mode.
 enum ScanRetakeTarget { passportFront, passportBack, visa }
 
+/// Type of visa or entry document selected by the user.
+enum VisaDocumentType { eVisa, ociCard, diplomatPassport, noVisa }
+
 /// The data returned when [ForeignPassportScanPage] is used in retake mode.
 class ScanRetakeResult {
   /// Which step was retaken.
@@ -115,6 +118,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   String _analysisLabel = 'Analysing document...';
   double _elapsedSeconds = 0;
   Timer? _elapsedTimer;
+
+  // ── Selected visa document type ────────────────────────────────────────────
+  VisaDocumentType? _selectedVisaDocType;
 
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
@@ -471,8 +477,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         ),
       );
     } else {
-      // Full flow — advance to visa step
-      setState(() => _currentStep = _ScanStep.visa);
+      // Full flow — show visa type selection dialog
+      await _showVisaTypeSelectionDialog();
     }
   }
 
@@ -665,6 +671,47 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     return null;
   }
 
+  // ── Visa type selection dialog ─────────────────────────────────────────────
+
+  /// Shows a dialog allowing the user to select which type of visa/entry
+  /// document should be captured next.
+  /// Returns when the user makes a selection or dismisses the dialog.
+  Future<void> _showVisaTypeSelectionDialog() async {
+    final result = await showDialog<VisaDocumentType>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => const _VisaTypeSelectionDialog(),
+    );
+
+    if (!mounted) return;
+
+    // User dismissed dialog — stay on back step
+    if (result == null) return;
+
+    // Store the selection
+    setState(() => _selectedVisaDocType = result);
+
+    // Handle each option
+    switch (result) {
+      case VisaDocumentType.eVisa:
+      case VisaDocumentType.diplomatPassport:
+        // Advance to visa scanning step
+        setState(() => _currentStep = _ScanStep.visa);
+        break;
+
+      case VisaDocumentType.ociCard:
+        // OCI not yet implemented — show snackbar and navigate to form
+        _showSnack('OCI Card scanning coming soon. Proceeding to form.');
+        _navigateToForm();
+        break;
+
+      case VisaDocumentType.noVisa:
+        // Skip visa capture and navigate directly to form
+        _navigateToForm();
+        break;
+    }
+  }
+
   // ── Skip back page ─────────────────────────────────────────────────────────
   void _skipCurrentStep() {
     if (_currentStep != _ScanStep.passportBack) return;
@@ -674,6 +721,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Navigate to form ───────────────────────────────────────────────────────
   void _navigateToForm() {
     if (!mounted) return;
+    // NOTE: _selectedVisaDocType contains the user's selection from the dialog.
+    // PassportCardScanPage does not currently accept a visaDocumentType parameter,
+    // so the user will need to select the visa type manually in the form if needed.
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -1380,6 +1430,186 @@ class _ShutterButton extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum _VisaErrorAction { retake, continueWithoutVisa }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visa Type Selection Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Dialog shown after passport back OCR completes in full flow mode.
+/// Allows the user to choose which type of visa/entry document to capture next.
+class _VisaTypeSelectionDialog extends StatelessWidget {
+  const _VisaTypeSelectionDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title row with close button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Select Visa / Entry Document',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 22),
+                    onPressed: () => Navigator.of(context).pop(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            // Options list
+            SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Option 1: e-Visa / Regular Visa
+                  _VisaTypeOption(
+                    icon: Icons.article_outlined,
+                    iconBg: const Color(0xFFFFF3E0),
+                    iconColor: AppColors.accent,
+                    title: 'e-Visa / Regular Visa',
+                    description:
+                        'Single front image — sticker, MRZ visa, or printed e-Visa',
+                    onTap: () =>
+                        Navigator.of(context).pop(VisaDocumentType.eVisa),
+                  ),
+                  const Divider(height: 1, indent: 16),
+
+                  // Option 2: OCI Card
+                  _VisaTypeOption(
+                    icon: Icons.badge_outlined,
+                    iconBg: const Color(0xFFE3F2FD),
+                    iconColor: const Color(0xFF1565C0),
+                    title: 'OCI Card',
+                    description:
+                        'Front required, back and stamp page both optional',
+                    onTap: () =>
+                        Navigator.of(context).pop(VisaDocumentType.ociCard),
+                  ),
+                  const Divider(height: 1, indent: 16),
+
+                  // Option 3: Diplomat Passport
+                  _VisaTypeOption(
+                    icon: Icons.workspace_premium_outlined,
+                    iconBg: const Color(0xFFF3E5F5),
+                    iconColor: const Color(0xFF6A1B9A),
+                    title: 'Diplomat Passport',
+                    description: 'Visa is optional — scan if held, or skip',
+                    onTap: () => Navigator.of(
+                      context,
+                    ).pop(VisaDocumentType.diplomatPassport),
+                  ),
+                  const Divider(height: 1, indent: 16),
+
+                  // Option 4: No Visa Required
+                  _VisaTypeOption(
+                    icon: Icons.not_interested,
+                    iconBg: const Color(0xFFE8F5E9),
+                    iconColor: const Color(0xFF2E7D32),
+                    title: 'No Visa Required',
+                    description: 'Bhutan & Nepal nationals, where applicable',
+                    onTap: () =>
+                        Navigator.of(context).pop(VisaDocumentType.noVisa),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Individual option card in the visa type selection dialog.
+class _VisaTypeOption extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  const _VisaTypeOption({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            // Icon container
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 24, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+
+            // Title and description
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom 2:3 (portrait) aspect ratio preset for ImageCropper
