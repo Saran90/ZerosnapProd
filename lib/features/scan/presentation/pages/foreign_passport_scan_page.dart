@@ -646,20 +646,48 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   }
 
   /// Runs OCR extraction for diplomat visa.
-  /// For diplomat visa, we skip API call and just navigate to form with the image.
+  /// Similar to e-Visa flow with API call and error handling.
   Future<void> _runDiplomatVisaOcr(String path) async {
-    // Diplomat visa doesn't need OCR extraction - just store the path
-    _visaImagePath = path;
+    setState(() => _analysisLabel = 'Extracting diplomat visa details...');
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractVisa(visaBase64: base64);
+      if (!mounted) return;
 
-    // Stop animation and navigate to form
-    _stopElapsedTimer();
-    setState(() => _isAnalysing = false);
+      final data = _extractOcrData(response);
+      if (data != null) {
+        _visaOcrData = data;
+        _visaImagePath = path;
 
-    // Small delay to ensure dialog dismisses before navigation
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (!mounted) return;
+        // Stop animation BEFORE navigation so dialog is dismissed
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+        // Small delay to ensure dialog dismisses before navigation
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+        _navigateToForm();
+      } else {
+        // API returned a non-200 code — stop animation and show error
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
 
-    _navigateToForm();
+        final message =
+            response?['message'] as String? ??
+            response?['Message'] as String? ??
+            'Could not extract diplomat visa details.';
+        await _showVisaErrorDialog(message, retakePath: path);
+      }
+    } catch (e) {
+      // Error - stop animation and show dialog
+      _stopElapsedTimer();
+      if (mounted) {
+        setState(() => _isAnalysing = false);
+        await _showVisaErrorDialog(
+          'Diplomat visa scan failed: $e',
+          retakePath: path,
+        );
+      }
+    }
   }
 
   /// Shows a dialog when visa OCR fails.
