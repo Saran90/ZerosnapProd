@@ -523,7 +523,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         case _ScanStep.ociStampPage:
           _ociStampPageImagePath = imagePath;
           await _runOciStampOcr(imagePath);
-          break;
+          // Don't stop analyzing - let the method handle it
+          return;
       }
     } finally {
       _stopElapsedTimer();
@@ -618,7 +619,12 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             ),
           );
         } else {
-          // Keep animation showing during navigation
+          // Stop animation BEFORE navigation so dialog is dismissed
+          _stopElapsedTimer();
+          setState(() => _isAnalysing = false);
+          // Small delay to ensure dialog dismisses before navigation
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (!mounted) return;
           _navigateToForm();
         }
       } else {
@@ -654,7 +660,12 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final data = _extractOcrData(response);
       if (data != null) {
         _visaOcrData = data;
-        // Keep animation showing during navigation to form
+        // Stop animation BEFORE navigation so dialog is dismissed
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+        // Small delay to ensure dialog dismisses before navigation
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
         _navigateToForm();
       } else {
         // API returned a non-200 code — stop animation and show error
@@ -1006,6 +1017,13 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         _ociStampOcrData = data;
       }
     } catch (_) {}
+    if (!mounted) return;
+
+    // Stop animation BEFORE navigation so dialog is dismissed
+    _stopElapsedTimer();
+    setState(() => _isAnalysing = false);
+    // Small delay to ensure dialog dismisses before navigation
+    await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
 
     // OCI stamp captured — navigate to form with all data
