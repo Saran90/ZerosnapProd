@@ -1118,28 +1118,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Navigate to form ───────────────────────────────────────────────────────
   void _navigateToForm() {
     if (!mounted) return;
-
-    // Determine which OCR data to use based on visa type
-    // For OCI, we may have both card OCR and stamp OCR
-    // For e-Visa/Diplomat, we have visa OCR
-    Map<String, dynamic>? visaOcrData;
-
-    if (_selectedVisaDocType == VisaDocumentType.ociCard) {
-      // For OCI, prioritize stamp OCR data, but merge with card data if available
-      if (_ociStampOcrData != null) {
-        visaOcrData = _ociStampOcrData;
-        // Merge card data (card data as fallback for missing fields)
-        if (_ociCardOcrData != null) {
-          visaOcrData = {..._ociCardOcrData!, ..._ociStampOcrData!};
-        }
-      } else if (_ociCardOcrData != null) {
-        visaOcrData = _ociCardOcrData;
-      }
-    } else {
-      // For e-Visa or Diplomat, use regular visa OCR
-      visaOcrData = _visaOcrData;
-    }
-
+    // NOTE: _selectedVisaDocType contains the user's selection from the dialog.
+    // PassportCardScanPage does not currently accept a visaDocumentType parameter,
+    // so the user will need to select the visa type manually in the form if needed.
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -1148,10 +1129,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
           initialVisaImagePath: _visaImagePath,
-          initialVisaImageBackPath: _ociCardBackImagePath,
-          initialVisaImageStampPath: _ociStampPageImagePath,
           initialPassportOcrData: _passportOcrData,
-          initialVisaOcrData: visaOcrData,
+          initialVisaOcrData: _visaOcrData,
           skipExtraction: true,
         ),
       ),
