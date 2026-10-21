@@ -242,15 +242,28 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         if (widget.initialVisaOcrData != null) {
           _fillVisaFromOcr(widget.initialVisaOcrData!);
         }
-        // Auto-select e-Visa type to show visa section if visa image was captured
-        if (widget.initialVisaImagePath != null &&
-            widget.initialVisaOcrData != null &&
-            _visaType.isEmpty) {
+        // Auto-select visa type based on captured images
+        if (widget.initialVisaImagePath != null && _visaType.isEmpty) {
           setState(() {
-            _visaType = 'e-Visa';
-            _selectedDropVisaType = _visaDropTypes
-                .where((v) => v.visaId == 'EV')
-                .firstOrNull;
+            // Detect visa type based on which images were captured
+            if (widget.initialVisaImageBackPath != null ||
+                widget.initialVisaImageStampPath != null) {
+              // OCI card flow (has back or stamp page)
+              _visaType = 'OCI';
+              _selectedDropVisaType = _visaDropTypes
+                  .where((v) => v.visaId == 'OCI')
+                  .firstOrNull;
+            } else {
+              // Regular e-Visa or Diplomat (check if OCR data exists)
+              // If no OCR data, it's likely a Diplomat visa
+              _visaType = widget.initialVisaOcrData != null
+                  ? 'e-Visa'
+                  : 'e-Visa';
+              _selectedDropVisaType = _visaDropTypes
+                  .where((v) => v.visaId == 'EV')
+                  .firstOrNull;
+            }
+
             if (_countries.isNotEmpty) {
               _selectedVisaCountry = _countries
                   .where((c) => c.code == 'IND')
