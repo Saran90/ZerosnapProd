@@ -1418,7 +1418,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         'NextDestination_OUT_Place': _nextDestPlaceOutsideCtrl.text,
         // Images
         'passportFile': frontBase64,
-        'passportBackFile': backBase64,
+        'IdBackFile': backBase64,
         'profileImageFile': profileBase64,
         'GuestSignatureFile': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
@@ -1459,9 +1459,9 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         bodyForPrint['passportFile'] =
             '<base64 image: ${bodyForPrint['passportFile'].toString().length} chars>';
       }
-      if (bodyForPrint['passportBackFile']?.toString().isNotEmpty == true) {
-        bodyForPrint['passportBackFile'] =
-            '<base64 image: ${bodyForPrint['passportBackFile'].toString().length} chars>';
+      if (bodyForPrint['IdBackFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['IdBackFile'] =
+            '<base64 image: ${bodyForPrint['IdBackFile'].toString().length} chars>';
       }
       if (bodyForPrint['profileImageFile']?.toString().isNotEmpty == true) {
         bodyForPrint['profileImageFile'] =
