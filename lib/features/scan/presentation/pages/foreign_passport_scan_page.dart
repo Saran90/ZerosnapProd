@@ -147,11 +147,6 @@ extension _ScanStepExt on _ScanStep {
         return false;
     }
   }
-
-  /// Whether this step should use portrait (vertical) scan area instead of landscape
-  bool get usesPortraitScanArea {
-    return this == _ScanStep.diplomatVisa;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,6 +193,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
   // ── Selected visa document type ────────────────────────────────────────────
   VisaDocumentType? _selectedVisaDocType;
+
+  // ── Diplomat visa orientation preference ───────────────────────────────────
+  bool _diplomatVisaUsePortrait = true; // default to portrait (vertical)
 
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
@@ -442,7 +440,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final double rectW;
       final double rectH;
 
-      if (_currentStep.usesPortraitScanArea) {
+      if (_currentStep == _ScanStep.diplomatVisa && _diplomatVisaUsePortrait) {
         // Portrait orientation for diplomat visa (2:3 ratio)
         rectW = screenW * 0.70;
         rectH = rectW * 1.5;
@@ -1150,6 +1148,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 isAnalysing: _isAnalysing,
                 analysisLabel: _analysisLabel,
                 elapsedSeconds: _elapsedSeconds,
+                usePortraitForDiplomat: _diplomatVisaUsePortrait,
               ),
 
             // ── Top bar ─────────────────────────────────────────────────────
@@ -1157,6 +1156,12 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
             // ── Instruction label ───────────────────────────────────────────
             if (_cameraReady && !_isAnalysing) _buildInstructionLabel(),
+
+            // ── Orientation toggle for diplomat visa ────────────────────────
+            if (_cameraReady &&
+                !_isAnalysing &&
+                _currentStep == _ScanStep.diplomatVisa)
+              _buildOrientationToggle(),
 
             // ── Previous capture thumbnail(s) ───────────────────────────────
             // Show passport front when on any step after front
@@ -1335,6 +1340,63 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     );
   }
 
+  // ── Orientation toggle for diplomat visa ──────────────────────────────────
+  Widget _buildOrientationToggle() {
+    return Positioned(
+      // Position it below the instruction label
+      top: MediaQuery.of(context).size.height * 0.22 + 50,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _diplomatVisaUsePortrait = !_diplomatVisaUsePortrait;
+              });
+            },
+            borderRadius: BorderRadius.circular(25),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _diplomatVisaUsePortrait
+                        ? Icons.crop_portrait
+                        : Icons.crop_landscape,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _diplomatVisaUsePortrait ? 'Vertical' : 'Horizontal',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.swap_horiz, color: Colors.white70, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Bottom controls ────────────────────────────────────────────────────────
   Widget _buildBottomControls() {
     return Row(
@@ -1363,12 +1425,14 @@ class _ScanOverlay extends StatelessWidget {
   final bool isAnalysing;
   final String analysisLabel;
   final double elapsedSeconds;
+  final bool usePortraitForDiplomat;
 
   const _ScanOverlay({
     required this.step,
     required this.isAnalysing,
     required this.analysisLabel,
     required this.elapsedSeconds,
+    required this.usePortraitForDiplomat,
   });
 
   @override
@@ -1379,7 +1443,7 @@ class _ScanOverlay extends StatelessWidget {
     final double rectW;
     final double rectH;
 
-    if (step.usesPortraitScanArea) {
+    if (step == _ScanStep.diplomatVisa && usePortraitForDiplomat) {
       // Portrait orientation for diplomat visa (2:3 ratio - taller than wide)
       rectW = size.width * 0.70; // Slightly narrower for portrait
       rectH = rectW * 1.5; // 2:3 ratio (portrait)
