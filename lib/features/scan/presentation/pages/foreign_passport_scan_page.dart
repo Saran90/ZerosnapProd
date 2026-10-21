@@ -1056,14 +1056,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   void _skipCurrentStep() {
     switch (_currentStep) {
       case _ScanStep.passportBack:
-        // Skipping passport back — check if we're in OCI flow or regular flow
-        if (_selectedVisaDocType == VisaDocumentType.ociCard) {
-          setState(() => _currentStep = _ScanStep.ociCardFront);
-        } else if (_selectedVisaDocType == VisaDocumentType.diplomatPassport) {
-          setState(() => _currentStep = _ScanStep.diplomatVisa);
-        } else {
-          setState(() => _currentStep = _ScanStep.visa);
-        }
+        // Skipping passport back — show visa type selection dialog
+        // The dialog will handle navigation based on user's choice
+        _showVisaTypeSelectionDialog();
         break;
 
       case _ScanStep.diplomatVisa:
@@ -1874,96 +1869,121 @@ class _VisaTypeSelectionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.all(0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Title row with close button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                ),
+              ),
               child: Row(
                 children: [
                   const Expanded(
                     child: Text(
                       'Select Visa / Entry Document',
                       style: TextStyle(
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A1A2E),
+                        color: Color(0xFF111827),
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 22),
-                    onPressed: () => Navigator.of(context).pop(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: const Icon(
+                          Icons.close,
+                          size: 24,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
 
-            const Divider(height: 1),
-
             // Options list
-            SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Option 1: e-Visa / Regular Visa
-                  _VisaTypeOption(
-                    icon: Icons.article_outlined,
-                    iconBg: const Color(0xFFFFF3E0),
-                    iconColor: AppColors.accent,
-                    title: 'e-Visa / Regular Visa',
-                    description:
-                        'Single front image — sticker, MRZ visa, or printed e-Visa',
-                    onTap: () =>
-                        Navigator.of(context).pop(VisaDocumentType.eVisa),
-                  ),
-                  const Divider(height: 1, indent: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    // Option 1: e-Visa / Regular Visa
+                    _VisaTypeOption(
+                      icon: Icons.description,
+                      iconBg: const Color(0xFFE8F4FD),
+                      iconColor: const Color(0xFF2196F3),
+                      title: 'e-Visa / Regular Visa',
+                      description:
+                          'Single front image — sticker, MRZ visa, or printed e-Visa',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.eVisa),
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Option 2: OCI Card
-                  _VisaTypeOption(
-                    icon: Icons.badge_outlined,
-                    iconBg: const Color(0xFFE3F2FD),
-                    iconColor: const Color(0xFF1565C0),
-                    title: 'OCI Card',
-                    description:
-                        'Front required, back and stamp page both optional',
-                    onTap: () =>
-                        Navigator.of(context).pop(VisaDocumentType.ociCard),
-                  ),
-                  const Divider(height: 1, indent: 16),
+                    // Option 2: OCI Card
+                    _VisaTypeOption(
+                      icon: Icons.badge_outlined,
+                      iconBg: const Color(0xFFE3F2FD),
+                      iconColor: const Color(0xFF1976D2),
+                      title: 'OCI Card',
+                      description:
+                          'Front required, back and stamp page both optional',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.ociCard),
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Option 3: Diplomat Passport
-                  _VisaTypeOption(
-                    icon: Icons.workspace_premium_outlined,
-                    iconBg: const Color(0xFFF3E5F5),
-                    iconColor: const Color(0xFF6A1B9A),
-                    title: 'Diplomat Passport',
-                    description: 'Visa is optional — scan if held, or skip',
-                    onTap: () => Navigator.of(
-                      context,
-                    ).pop(VisaDocumentType.diplomatPassport),
-                  ),
-                  const Divider(height: 1, indent: 16),
+                    // Option 3: Diplomat Passport
+                    _VisaTypeOption(
+                      icon: Icons.military_tech,
+                      iconBg: const Color(0xFFFFF3E0),
+                      iconColor: const Color(0xFFF57C00),
+                      title: 'Diplomat Passport',
+                      description: 'Visa is optional — scan if held, or skip',
+                      onTap: () => Navigator.of(
+                        context,
+                      ).pop(VisaDocumentType.diplomatPassport),
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Option 4: No Visa Required
-                  _VisaTypeOption(
-                    icon: Icons.not_interested,
-                    iconBg: const Color(0xFFE8F5E9),
-                    iconColor: const Color(0xFF2E7D32),
-                    title: 'No Visa Required',
-                    description: 'Bhutan & Nepal nationals, where applicable',
-                    onTap: () =>
-                        Navigator.of(context).pop(VisaDocumentType.noVisa),
-                  ),
-                ],
+                    // Option 4: No Visa Required
+                    _VisaTypeOption(
+                      icon: Icons.block,
+                      iconBg: const Color(0xFFFFEBEE),
+                      iconColor: const Color(0xFFD32F2F),
+                      title: 'No Visa Required',
+                      description: 'Bhutan & Nepal nationals, where applicable',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.noVisa),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -1993,49 +2013,66 @@ class _VisaTypeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            // Icon container
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-              child: Icon(icon, size: 24, color: iconColor),
-            ),
-            const SizedBox(width: 12),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon container
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 28, color: iconColor),
+              ),
+              const SizedBox(width: 16),
 
-            // Title and description
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A2E),
+              // Title and description
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF111827),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF6B7280),
+                        height: 1.4,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
