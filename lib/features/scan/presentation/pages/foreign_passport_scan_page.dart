@@ -10,6 +10,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/passport_portrait_extractor.dart';
 import '../../data/repositories/passport_repository.dart';
 import 'passport_card_scan_page.dart';
 
@@ -201,6 +202,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   String? _ociCardFrontImagePath;
   String? _ociCardBackImagePath;
   String? _ociStampPageImagePath;
+  String? _profileImagePath;
 
   // ── Screen size cache (set in build, used by crop) ────────────────────────
   Size? _lastScreenSize;
@@ -542,6 +544,15 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         _passportOcrData = data;
       }
     } catch (_) {}
+
+    // Auto-extract profile portrait from passport front
+    if (mounted) {
+      final profilePath = await extractPassportPortrait(path);
+      if (profilePath != null) {
+        _profileImagePath = profilePath;
+      }
+    }
+
     if (!mounted) return;
 
     if (widget.retakeTarget != null) {
@@ -982,6 +993,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           selectedVisaDocumentType: visaTypeForForm,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
+          initialProfileImagePath: _profileImagePath,
           skipExtraction: true,
         ),
       ),

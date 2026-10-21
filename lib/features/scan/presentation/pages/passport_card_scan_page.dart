@@ -67,6 +67,9 @@ class PassportCardScanPage extends StatefulWidget {
   /// Defaults to 'Passport' if not provided
   final String? pageTitle;
 
+  /// Pre-filled profile image path (auto-extracted from passport front).
+  final String? initialProfileImagePath;
+
   const PassportCardScanPage({
     super.key,
     this.initialFrontImagePath,
@@ -81,6 +84,7 @@ class PassportCardScanPage extends StatefulWidget {
     this.autoOpenCamera = false,
     this.showVisaSection = true,
     this.pageTitle,
+    this.initialProfileImagePath,
   });
 
   @override
@@ -235,6 +239,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       if (widget.initialVisaImageStampPath != null) {
         _visaImageStampPath = widget.initialVisaImageStampPath!;
         debugPrint('📸 Set _visaImageStampPath: $_visaImageStampPath');
+      }
+      // Pre-populate profile image if auto-extracted
+      if (widget.initialProfileImagePath != null &&
+          widget.initialProfileImagePath!.isNotEmpty) {
+        _profileImagePath = widget.initialProfileImagePath!;
       }
       // Fill form fields after lookups are loaded
       WidgetsBinding.instance.addPostFrameCallback((_) async {
