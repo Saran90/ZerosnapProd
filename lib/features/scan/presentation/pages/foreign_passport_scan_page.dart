@@ -649,175 +649,20 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   }
 
   /// Runs OCR extraction for diplomat visa.
-  /// Similar to regular visa but navigates to form on completion (skippable behavior).
+  /// For diplomat visa, we skip API call and just navigate to form with the image.
   Future<void> _runDiplomatVisaOcr(String path) async {
-    setState(() => _analysisLabel = 'Extracting diplomat visa details...');
-    try {
-      final base64 = base64Encode(await File(path).readAsBytes());
-      final response = await _repo.extractVisa(visaBase64: base64);
-      if (!mounted) return;
+    // Diplomat visa doesn't need OCR extraction - just store the path
+    _visaImagePath = path;
 
-      final data = _extractOcrData(response);
-      if (data != null) {
-        _visaOcrData = data;
-        // Stop animation BEFORE navigation so dialog is dismissed
-        _stopElapsedTimer();
-        setState(() => _isAnalysing = false);
-        // Small delay to ensure dialog dismisses before navigation
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (!mounted) return;
-        _navigateToForm();
-      } else {
-        // API returned a non-200 code — stop animation and show error
-        _stopElapsedTimer();
-        setState(() => _isAnalysing = false);
+    // Stop animation and navigate to form
+    _stopElapsedTimer();
+    setState(() => _isAnalysing = false);
 
-        final message =
-            response?['message'] as String? ??
-            response?['Message'] as String? ??
-            'Could not extract diplomat visa details.';
-        await _showDiplomatVisaErrorDialog(message, retakePath: path);
-      }
-    } catch (e) {
-      // Error - stop animation and show dialog
-      _stopElapsedTimer();
-      if (mounted) {
-        setState(() => _isAnalysing = false);
-        await _showDiplomatVisaErrorDialog(
-          'Diplomat visa scan failed: $e',
-          retakePath: path,
-        );
-      }
-    }
-  }
-
-  /// Shows a dialog when diplomat visa OCR fails.
-  ///
-  /// • [Retake] — stays on diplomat visa step for another attempt.
-  /// • [Continue without Visa] — navigates to form without visa data.
-  Future<void> _showDiplomatVisaErrorDialog(
-    String message, {
-    required String retakePath,
-  }) async {
+    // Small delay to ensure dialog dismisses before navigation
+    await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
 
-    final action = await showDialog<_VisaErrorAction>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.error_outline_rounded,
-                color: Colors.red[700],
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Diplomat Visa Scan Failed',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          message,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFF4B5563),
-            height: 1.5,
-          ),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          // Continue without visa — secondary action
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () =>
-                  Navigator.of(ctx).pop(_VisaErrorAction.continueWithoutVisa),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF4B5563),
-                side: const BorderSide(color: Color(0xFFD1D5DB)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: const Text(
-                'Continue without Visa',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Retake — primary action
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(_VisaErrorAction.retake),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.camera_alt_outlined, size: 18),
-                  SizedBox(width: 6),
-                  Text(
-                    'Retake Visa Photo',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-
-    switch (action) {
-      case _VisaErrorAction.retake:
-        // Stay on diplomat visa step — user will press shutter or gallery again
-        setState(() {
-          _visaImagePath = null;
-          _currentStep = _ScanStep.diplomatVisa;
-        });
-        break;
-      case _VisaErrorAction.continueWithoutVisa:
-        // Navigate to form without visa
-        _navigateToForm();
-        break;
-      case null:
-        // Dialog dismissed — treat same as retake
-        setState(() {
-          _visaImagePath = null;
-          _currentStep = _ScanStep.diplomatVisa;
-        });
-        break;
-    }
+    _navigateToForm();
   }
 
   /// Shows a dialog when visa OCR fails.
@@ -964,64 +809,33 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── OCI Card OCR methods ───────────────────────────────────────────────────
 
   Future<void> _runOciCardFrontOcr(String path) async {
-    setState(() => _analysisLabel = 'Extracting OCI card details...');
-    try {
-      final base64 = base64Encode(await File(path).readAsBytes());
-      final response = await _repo.extractPassport(frontBase64: base64);
-      if (!mounted) return;
-      final data = _extractOcrData(response);
-      if (data != null) {
-        _ociCardOcrData = data;
-      }
-    } catch (_) {}
-    if (!mounted) return;
+    // OCI doesn't need OCR extraction - just store the path and advance
+    _ociCardFrontImagePath = path;
 
-    // OCI front is not retakeable in current design
+    if (!mounted) return;
     // Always advance to OCI back step
     setState(() => _currentStep = _ScanStep.ociCardBack);
   }
 
   Future<void> _runOciCardBackOcr(String path) async {
-    setState(() => _analysisLabel = 'Extracting OCI card details...');
-    Map<String, dynamic>? data;
-    try {
-      final base64 = base64Encode(await File(path).readAsBytes());
-      final response = await _repo.extractPassport(frontBase64: base64);
-      if (!mounted) return;
-      data = _extractOcrData(response);
-      if (data != null) {
-        // Merge back OCR into existing front OCR (front values win on conflict)
-        if (_ociCardOcrData != null) {
-          final merged = <String, dynamic>{...data, ..._ociCardOcrData!};
-          _ociCardOcrData = merged;
-        } else {
-          _ociCardOcrData = data;
-        }
-      }
-    } catch (_) {}
-    if (!mounted) return;
+    // OCI doesn't need OCR extraction - just store the path and advance
+    _ociCardBackImagePath = path;
 
+    if (!mounted) return;
     // Always advance to stamp page step
     setState(() => _currentStep = _ScanStep.ociStampPage);
   }
 
   Future<void> _runOciStampOcr(String path) async {
-    setState(() => _analysisLabel = 'Extracting OCI stamp details...');
-    try {
-      final base64 = base64Encode(await File(path).readAsBytes());
-      final response = await _repo.extractVisa(visaBase64: base64);
-      if (!mounted) return;
+    // OCI doesn't need OCR extraction - just store the path
+    _ociStampPageImagePath = path;
 
-      final data = _extractOcrData(response);
-      if (data != null) {
-        _ociStampOcrData = data;
-      }
-    } catch (_) {}
     if (!mounted) return;
 
-    // Stop animation BEFORE navigation so dialog is dismissed
+    // Stop animation and navigate to form
     _stopElapsedTimer();
     setState(() => _isAnalysing = false);
+
     // Small delay to ensure dialog dismisses before navigation
     await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
