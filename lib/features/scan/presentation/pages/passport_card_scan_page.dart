@@ -34,6 +34,12 @@ class PassportCardScanPage extends StatefulWidget {
   /// Pre-filled visa image path (from [ForeignPassportScanPage]).
   final String? initialVisaImagePath;
 
+  /// Pre-filled visa back image path (for OCI back page).
+  final String? initialVisaImageBackPath;
+
+  /// Pre-filled visa stamp page image path (for OCI stamp page).
+  final String? initialVisaImageStampPath;
+
   /// When provided, these OCR results will be used to pre-fill the form
   /// without running OCR again (from [ForeignPassportScanPage]).
   final Map<String, dynamic>? initialPassportOcrData;
@@ -63,6 +69,8 @@ class PassportCardScanPage extends StatefulWidget {
     this.initialFrontImagePath,
     this.initialBackImagePath,
     this.initialVisaImagePath,
+    this.initialVisaImageBackPath,
+    this.initialVisaImageStampPath,
     this.initialPassportOcrData,
     this.initialVisaOcrData,
     this.skipExtraction = false,
@@ -214,6 +222,12 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       }
       if (widget.initialVisaImagePath != null) {
         _visaImagePath = widget.initialVisaImagePath!;
+      }
+      if (widget.initialVisaImageBackPath != null) {
+        _visaImageBackPath = widget.initialVisaImageBackPath!;
+      }
+      if (widget.initialVisaImageStampPath != null) {
+        _visaImageStampPath = widget.initialVisaImageStampPath!;
       }
       // Fill form fields after lookups are loaded
       WidgetsBinding.instance.addPostFrameCallback((_) async {

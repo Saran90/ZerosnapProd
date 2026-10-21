@@ -1118,9 +1118,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Navigate to form ───────────────────────────────────────────────────────
   void _navigateToForm() {
     if (!mounted) return;
-    // NOTE: _selectedVisaDocType contains the user's selection from the dialog.
-    // PassportCardScanPage does not currently accept a visaDocumentType parameter,
-    // so the user will need to select the visa type manually in the form if needed.
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -1129,6 +1127,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
           initialVisaImagePath: _visaImagePath,
+          initialVisaImageBackPath: _ociCardBackImagePath,
+          initialVisaImageStampPath: _ociStampPageImagePath,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
           skipExtraction: true,
