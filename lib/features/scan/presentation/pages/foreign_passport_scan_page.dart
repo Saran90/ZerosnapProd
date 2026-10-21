@@ -48,7 +48,8 @@ class ScanRetakeResult {
 enum _ScanStep {
   passportFront, // Step 1 of 3 or 5
   passportBack, // Step 2 of 3 or 5 (skippable)
-  visa, // Step 3 of 3 (for eVisa/diplomat flow)
+  visa, // Step 3 of 3 (for eVisa flow)
+  diplomatVisa, // Step 3 of 3 (for diplomat flow, skippable)
   ociCardFront, // Step 3 of 5 (for OCI flow)
   ociCardBack, // Step 4 of 5 (for OCI flow, skippable)
   ociStampPage, // Step 5 of 5 (for OCI flow, skippable)
@@ -63,6 +64,8 @@ extension _ScanStepExt on _ScanStep {
         return 'Passport (Back)';
       case _ScanStep.visa:
         return 'Visa';
+      case _ScanStep.diplomatVisa:
+        return 'Diplomat Visa (Optional)';
       case _ScanStep.ociCardFront:
         return 'OCI Card (Front)';
       case _ScanStep.ociCardBack:
@@ -80,6 +83,8 @@ extension _ScanStepExt on _ScanStep {
         return 'SCAN PASSPORT – BACK';
       case _ScanStep.visa:
         return 'SCAN VISA – FRONT';
+      case _ScanStep.diplomatVisa:
+        return 'SCAN DIPLOMAT VISA – FRONT';
       case _ScanStep.ociCardFront:
         return 'SCAN OCI CARD – FRONT';
       case _ScanStep.ociCardBack:
@@ -104,11 +109,13 @@ extension _ScanStepExt on _ScanStep {
         case _ScanStep.ociStampPage:
           return 5;
         case _ScanStep.visa:
+        case _ScanStep.diplomatVisa:
           return 3; // shouldn't happen in OCI flow
       }
     }
-    // For regular visa flow, we have 3 steps
-    return index + 1;
+    // For regular visa/diplomat flow, we have 3 steps
+    // diplomat visa is also step 3
+    return this == _ScanStep.diplomatVisa ? 3 : index + 1;
   }
 
   int totalSteps(VisaDocumentType? selectedType) {
@@ -121,6 +128,7 @@ extension _ScanStepExt on _ScanStep {
   bool get isSkippable {
     switch (this) {
       case _ScanStep.passportBack:
+      case _ScanStep.diplomatVisa:
       case _ScanStep.ociCardBack:
       case _ScanStep.ociStampPage:
         return true;
@@ -138,6 +146,11 @@ extension _ScanStepExt on _ScanStep {
       default:
         return false;
     }
+  }
+
+  /// Whether this step should use portrait (vertical) scan area instead of landscape
+  bool get usesPortraitScanArea {
+    return this == _ScanStep.diplomatVisa;
   }
 }
 
@@ -330,6 +343,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       _ScanStep.passportFront => 'Crop Passport Front',
       _ScanStep.passportBack => 'Crop Passport Back',
       _ScanStep.visa => 'Crop Visa',
+      _ScanStep.diplomatVisa => 'Crop Diplomat Visa',
       _ScanStep.ociCardFront => 'Crop OCI Card Front',
       _ScanStep.ociCardBack => 'Crop OCI Card Back',
       _ScanStep.ociStampPage => 'Crop OCI Stamp Page',
@@ -424,8 +438,20 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final offsetY = (renderedH - screenH) / 2;
 
       // ── 5. Scan rect in screen coordinates ────────────────────────────────
-      final rectW = screenW * 0.88;
-      final rectH = rectW * 0.66;
+      // Use portrait or landscape based on current step
+      final double rectW;
+      final double rectH;
+
+      if (_currentStep.usesPortraitScanArea) {
+        // Portrait orientation for diplomat visa (2:3 ratio)
+        rectW = screenW * 0.70;
+        rectH = rectW * 1.5;
+      } else {
+        // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
+        rectW = screenW * 0.88;
+        rectH = rectW * 0.66;
+      }
+
       final rectLeft = (screenW - rectW) / 2;
       final rectTop = screenH * 0.30;
 
@@ -481,6 +507,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         case _ScanStep.visa:
           _visaImagePath = imagePath;
           await _runVisaOcr(imagePath);
+          break;
+        case _ScanStep.diplomatVisa:
+          _visaImagePath = imagePath;
+          await _runDiplomatVisaOcr(imagePath);
           break;
         case _ScanStep.ociCardFront:
           _ociCardFrontImagePath = imagePath;
@@ -600,6 +630,167 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       if (mounted) {
         await _showVisaErrorDialog('Visa scan failed: $e', retakePath: path);
       }
+    }
+  }
+
+  /// Runs OCR extraction for diplomat visa.
+  /// Similar to regular visa but navigates to form on completion (skippable behavior).
+  Future<void> _runDiplomatVisaOcr(String path) async {
+    setState(() => _analysisLabel = 'Extracting diplomat visa details...');
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractVisa(visaBase64: base64);
+      if (!mounted) return;
+
+      final data = _extractOcrData(response);
+      if (data != null) {
+        _visaOcrData = data;
+        // Diplomat visa always navigates to form after successful capture
+        _navigateToForm();
+      } else {
+        // API returned a non-200 code — surface the message to the user
+        final message =
+            response?['message'] as String? ??
+            response?['Message'] as String? ??
+            'Could not extract diplomat visa details.';
+        await _showDiplomatVisaErrorDialog(message, retakePath: path);
+      }
+    } catch (e) {
+      if (mounted) {
+        await _showDiplomatVisaErrorDialog(
+          'Diplomat visa scan failed: $e',
+          retakePath: path,
+        );
+      }
+    }
+  }
+
+  /// Shows a dialog when diplomat visa OCR fails.
+  ///
+  /// • [Retake] — stays on diplomat visa step for another attempt.
+  /// • [Continue without Visa] — navigates to form without visa data.
+  Future<void> _showDiplomatVisaErrorDialog(
+    String message, {
+    required String retakePath,
+  }) async {
+    if (!mounted) return;
+
+    final action = await showDialog<_VisaErrorAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline_rounded,
+                color: Colors.red[700],
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Diplomat Visa Scan Failed',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF4B5563),
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          // Continue without visa — secondary action
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () =>
+                  Navigator.of(ctx).pop(_VisaErrorAction.continueWithoutVisa),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF4B5563),
+                side: const BorderSide(color: Color(0xFFD1D5DB)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: const Text(
+                'Continue without Visa',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Retake — primary action
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(_VisaErrorAction.retake),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.camera_alt_outlined, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    'Retake Visa Photo',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    switch (action) {
+      case _VisaErrorAction.retake:
+        // Stay on diplomat visa step — user will press shutter or gallery again
+        setState(() {
+          _visaImagePath = null;
+          _currentStep = _ScanStep.diplomatVisa;
+        });
+        break;
+      case _VisaErrorAction.continueWithoutVisa:
+        // Navigate to form without visa
+        _navigateToForm();
+        break;
+      case null:
+        // Dialog dismissed — treat same as retake
+        setState(() {
+          _visaImagePath = null;
+          _currentStep = _ScanStep.diplomatVisa;
+        });
+        break;
     }
   }
 
@@ -840,9 +1031,13 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     // Handle each option
     switch (result) {
       case VisaDocumentType.eVisa:
-      case VisaDocumentType.diplomatPassport:
-        // Advance to visa scanning step
+        // Advance to regular visa scanning step
         setState(() => _currentStep = _ScanStep.visa);
+        break;
+
+      case VisaDocumentType.diplomatPassport:
+        // Advance to diplomat visa scanning step (skippable, portrait orientation)
+        setState(() => _currentStep = _ScanStep.diplomatVisa);
         break;
 
       case VisaDocumentType.ociCard:
@@ -864,9 +1059,16 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         // Skipping passport back — check if we're in OCI flow or regular flow
         if (_selectedVisaDocType == VisaDocumentType.ociCard) {
           setState(() => _currentStep = _ScanStep.ociCardFront);
+        } else if (_selectedVisaDocType == VisaDocumentType.diplomatPassport) {
+          setState(() => _currentStep = _ScanStep.diplomatVisa);
         } else {
           setState(() => _currentStep = _ScanStep.visa);
         }
+        break;
+
+      case _ScanStep.diplomatVisa:
+        // Skip diplomat visa → navigate to form without visa
+        _navigateToForm();
         break;
 
       case _ScanStep.ociCardBack:
@@ -1025,6 +1227,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                   onTap: _skipCurrentStep,
                   secondaryText: _currentStep == _ScanStep.passportBack
                       ? 'Not every passport has a printed back/last page'
+                      : _currentStep == _ScanStep.diplomatVisa
+                      ? 'Diplomatic passport holders are not always required to hold a visa'
                       : 'Skip if not available',
                 ),
               ),
@@ -1175,9 +1379,21 @@ class _ScanOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    // Scan rect: 88% wide, ~38% tall, vertically centred slightly above middle
-    final rectW = size.width * 0.88;
-    final rectH = rectW * 0.66; // landscape card ratio
+
+    // Scan rect dimensions depend on whether portrait or landscape orientation
+    final double rectW;
+    final double rectH;
+
+    if (step.usesPortraitScanArea) {
+      // Portrait orientation for diplomat visa (2:3 ratio - taller than wide)
+      rectW = size.width * 0.70; // Slightly narrower for portrait
+      rectH = rectW * 1.5; // 2:3 ratio (portrait)
+    } else {
+      // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
+      rectW = size.width * 0.88;
+      rectH = rectW * 0.66; // 3:2 ratio (landscape)
+    }
+
     final rectLeft = (size.width - rectW) / 2;
     final rectTop = size.height * 0.30;
 
