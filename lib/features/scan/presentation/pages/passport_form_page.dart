@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/navigation/app_navigator.dart';
 import '../../../../core/network/shared_preferences_provider.dart';
+import '../../../../core/services/firebase_logger.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
@@ -506,14 +507,19 @@ class _PassportFormPageState extends State<PassportFormPage> {
         return;
       }
 
-      // Check HTTP code � 200 means success
+      // Check HTTP code — 200 means success
       final code = response['code'] as int? ?? response['Code'] as int?;
       if (code != null && code != 200) {
-        _showSnack(
-          response['message'] as String? ??
-              response['Message'] as String? ??
-              'Could not extract visa details. Please fill in manually.',
+        final msg =
+            response['message'] as String? ??
+            response['Message'] as String? ??
+            'Could not extract visa details. Please fill in manually.';
+        FirebaseLogger.instance.logError(
+          Exception('Visa OCR failed (code=$code): $msg'),
+          null,
+          hint: 'ocr_failure | endpoint=GetGVVisa | code=$code | $msg',
         );
+        _showSnack(msg);
         return;
       }
 
