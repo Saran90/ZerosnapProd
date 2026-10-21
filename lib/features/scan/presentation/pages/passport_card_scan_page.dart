@@ -226,12 +226,15 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       }
       if (widget.initialVisaImagePath != null) {
         _visaImagePath = widget.initialVisaImagePath!;
+        debugPrint('📸 Set _visaImagePath: $_visaImagePath');
       }
       if (widget.initialVisaImageBackPath != null) {
         _visaImageBackPath = widget.initialVisaImageBackPath!;
+        debugPrint('📸 Set _visaImageBackPath: $_visaImageBackPath');
       }
       if (widget.initialVisaImageStampPath != null) {
         _visaImageStampPath = widget.initialVisaImageStampPath!;
+        debugPrint('📸 Set _visaImageStampPath: $_visaImageStampPath');
       }
       // Fill form fields after lookups are loaded
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -248,6 +251,18 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         }
         // Auto-select visa type based on selected type from dialog or captured images
         if (_visaType.isEmpty) {
+          debugPrint('🔍 Auto-selecting visa type...');
+          debugPrint(
+            '   selectedVisaDocumentType: ${widget.selectedVisaDocumentType}',
+          );
+          debugPrint('   initialVisaImagePath: ${widget.initialVisaImagePath}');
+          debugPrint(
+            '   initialVisaImageBackPath: ${widget.initialVisaImageBackPath}',
+          );
+          debugPrint(
+            '   initialVisaImageStampPath: ${widget.initialVisaImageStampPath}',
+          );
+
           setState(() {
             // Priority 1: Use the explicitly selected type from dialog
             if (widget.selectedVisaDocumentType != null) {
@@ -287,6 +302,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                   .where((c) => c.code == 'IND')
                   .firstOrNull;
             }
+
+            debugPrint('✅ Auto-selected: _visaType=$_visaType, _isOCI=$_isOCI');
           });
         }
       });
