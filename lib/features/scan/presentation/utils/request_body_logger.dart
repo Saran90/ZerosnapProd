@@ -18,7 +18,7 @@ class RequestBodyLogger {
       'passportFile',
       'passportBackFile',
       'profileImageFile',
-      'User_Signature',
+      'GuestSignatureFile',
       'visaFile',
       'visaFile2',
       'visaFile3',

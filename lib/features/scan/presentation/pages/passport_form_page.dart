@@ -735,7 +735,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'passportFile': '',
         'passportBackFile': _toBase64FromPath(_backImagePath) ?? '',
         'profileImageFile': _portraitBase64 ?? '',
-        'User_Signature': _signatureBytes != null
+        'GuestSignatureFile': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
             : '',
       };
@@ -781,9 +781,9 @@ class _PassportFormPageState extends State<PassportFormPage> {
         bodyForPrint['profileImageFile'] =
             '<base64 image: ${bodyForPrint['profileImageFile'].toString().length} chars>';
       }
-      if (bodyForPrint['User_Signature']?.toString().isNotEmpty == true) {
-        bodyForPrint['User_Signature'] =
-            '<base64 signature: ${bodyForPrint['User_Signature'].toString().length} chars>';
+      if (bodyForPrint['GuestSignatureFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['GuestSignatureFile'] =
+            '<base64 signature: ${bodyForPrint['GuestSignatureFile'].toString().length} chars>';
       }
       if (bodyForPrint['visaFile']?.toString().isNotEmpty == true) {
         bodyForPrint['visaFile'] =
