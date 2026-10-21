@@ -505,11 +505,13 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         case _ScanStep.visa:
           _visaImagePath = imagePath;
           await _runVisaOcr(imagePath);
-          break;
+          // Don't stop analyzing - let the method handle it
+          return;
         case _ScanStep.diplomatVisa:
           _visaImagePath = imagePath;
           await _runDiplomatVisaOcr(imagePath);
-          break;
+          // Don't stop analyzing - let the method handle it
+          return;
         case _ScanStep.ociCardFront:
           _ociCardFrontImagePath = imagePath;
           await _runOciCardFrontOcr(imagePath);
@@ -606,6 +608,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         _visaOcrData = data;
         if (widget.retakeTarget != null) {
           // Retake mode — pop back with the visa result
+          _stopElapsedTimer();
+          setState(() => _isAnalysing = false);
           Navigator.of(context).pop(
             ScanRetakeResult(
               target: ScanRetakeTarget.visa,
@@ -614,10 +618,14 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             ),
           );
         } else {
+          // Keep animation showing during navigation
           _navigateToForm();
         }
       } else {
-        // API returned a non-200 code — surface the message to the user
+        // API returned a non-200 code — stop animation and show error
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+
         final message =
             response?['message'] as String? ??
             response?['Message'] as String? ??
@@ -625,7 +633,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         await _showVisaErrorDialog(message, retakePath: path);
       }
     } catch (e) {
+      // Error - stop animation and show dialog
+      _stopElapsedTimer();
       if (mounted) {
+        setState(() => _isAnalysing = false);
         await _showVisaErrorDialog('Visa scan failed: $e', retakePath: path);
       }
     }
@@ -643,10 +654,13 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final data = _extractOcrData(response);
       if (data != null) {
         _visaOcrData = data;
-        // Diplomat visa always navigates to form after successful capture
+        // Keep animation showing during navigation to form
         _navigateToForm();
       } else {
-        // API returned a non-200 code — surface the message to the user
+        // API returned a non-200 code — stop animation and show error
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+
         final message =
             response?['message'] as String? ??
             response?['Message'] as String? ??
@@ -654,7 +668,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         await _showDiplomatVisaErrorDialog(message, retakePath: path);
       }
     } catch (e) {
+      // Error - stop animation and show dialog
+      _stopElapsedTimer();
       if (mounted) {
+        setState(() => _isAnalysing = false);
         await _showDiplomatVisaErrorDialog(
           'Diplomat visa scan failed: $e',
           retakePath: path,
