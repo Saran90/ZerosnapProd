@@ -233,6 +233,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     };
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
+    // Always start fresh — no profile image from a previous session.
+    // _profileImagePath stays null until extractPassportPortrait succeeds.
+    _profileImagePath = null;
   }
 
   @override

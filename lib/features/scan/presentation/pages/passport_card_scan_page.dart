@@ -240,9 +240,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _visaImageStampPath = widget.initialVisaImageStampPath!;
         debugPrint('📸 Set _visaImageStampPath: $_visaImageStampPath');
       }
-      // Pre-populate profile image if auto-extracted
+      // Pre-populate profile image only if the extracted file still exists on disk.
+      // This guards against stale paths from a previous session surviving in memory.
       if (widget.initialProfileImagePath != null &&
-          widget.initialProfileImagePath!.isNotEmpty) {
+          widget.initialProfileImagePath!.isNotEmpty &&
+          File(widget.initialProfileImagePath!).existsSync()) {
         _profileImagePath = widget.initialProfileImagePath!;
       }
       // Fill form fields after lookups are loaded
@@ -490,7 +492,33 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     ]) {
       c.dispose();
     }
+    // Delete the auto-extracted portrait file so it never bleeds into the
+    // next session when the user opens the form again without scanning.
+    _deleteProfileLatestFile();
     super.dispose();
+  }
+
+  /// Deletes `profile_latest.jpg` from the same directory as the front image.
+  /// Called from [dispose] so stale portraits don't persist across sessions.
+  void _deleteProfileLatestFile() {
+    final dir = _frontImagePath.isNotEmpty
+        ? File(_frontImagePath).parent.path
+        : (widget.initialFrontImagePath != null
+              ? File(widget.initialFrontImagePath!).parent.path
+              : null);
+    if (dir == null) return;
+    final profileFile = File('$dir/profile_latest.jpg');
+    // Fire-and-forget: ignore errors, this is best-effort cleanup.
+    Future(() async {
+      try {
+        if (await profileFile.exists()) {
+          await profileFile.delete();
+          debugPrint(
+            'PassportCardScanPage: Cleaned up profile_latest.jpg on dispose',
+          );
+        }
+      } catch (_) {}
+    });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

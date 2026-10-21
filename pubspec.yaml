@@ -56,6 +56,9 @@ dependencies:
 
   # OCR for CAPTCHA reading
   google_mlkit_text_recognition: ^0.13.1
+  
+  # Face detection for passport portrait extraction
+  google_mlkit_face_detection: ^0.11.1
 
   # Utils
   intl: ^0.19.0

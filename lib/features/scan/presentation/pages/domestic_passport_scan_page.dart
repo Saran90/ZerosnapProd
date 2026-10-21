@@ -111,6 +111,8 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
     };
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
+    // Always start fresh — no profile image from a previous session.
+    _profileImagePath = null;
   }
 
   @override
