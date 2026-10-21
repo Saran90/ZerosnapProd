@@ -361,6 +361,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
           target: ScanRetakeTarget.passportFront,
           imagePath: path,
           ocrData: _passportOcrData,
+          profileImagePath: _profileImagePath,
         ),
       );
     } else {

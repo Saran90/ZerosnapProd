@@ -760,8 +760,11 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       case ScanRetakeTarget.passportFront:
         setState(() {
           _frontImagePath = result.imagePath;
-          // Keep profile image in sync with the new front image
-          if (_profileImagePath.isEmpty) {
+          // Use auto-extracted profile if available, otherwise keep existing or use front
+          if (result.profileImagePath != null &&
+              result.profileImagePath!.isNotEmpty) {
+            _profileImagePath = result.profileImagePath!;
+          } else if (_profileImagePath.isEmpty) {
             _profileImagePath = result.imagePath;
           }
         });

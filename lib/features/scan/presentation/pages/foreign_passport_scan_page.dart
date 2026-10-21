@@ -35,10 +35,14 @@ class ScanRetakeResult {
   /// OCR data extracted from the image, or null if extraction failed.
   final Map<String, dynamic>? ocrData;
 
+  /// Auto-extracted profile portrait path (only populated for passportFront target).
+  final String? profileImagePath;
+
   const ScanRetakeResult({
     required this.target,
     required this.imagePath,
     this.ocrData,
+    this.profileImagePath,
   });
 }
 
@@ -562,6 +566,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           target: ScanRetakeTarget.passportFront,
           imagePath: path,
           ocrData: _passportOcrData,
+          profileImagePath: _profileImagePath,
         ),
       );
     } else {
