@@ -194,9 +194,6 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Selected visa document type ────────────────────────────────────────────
   VisaDocumentType? _selectedVisaDocType;
 
-  // ── Diplomat visa orientation preference ───────────────────────────────────
-  bool _diplomatVisaUsePortrait = true; // default to portrait (vertical)
-
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
   String? _backImagePath;
@@ -440,8 +437,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final double rectW;
       final double rectH;
 
-      if (_currentStep == _ScanStep.diplomatVisa && _diplomatVisaUsePortrait) {
-        // Portrait orientation for diplomat visa (2:3 ratio)
+      if (_currentStep == _ScanStep.diplomatVisa) {
+        // Portrait orientation for diplomat visa (2:3 ratio) - always vertical
         rectW = screenW * 0.70;
         rectH = rectW * 1.5;
       } else {
@@ -1009,7 +1006,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 isAnalysing: _isAnalysing,
                 analysisLabel: _analysisLabel,
                 elapsedSeconds: _elapsedSeconds,
-                usePortraitForDiplomat: _diplomatVisaUsePortrait,
+                usePortraitForDiplomat: true, // Always portrait for diplomat
               ),
 
             // ── Top bar ─────────────────────────────────────────────────────
@@ -1017,12 +1014,6 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
             // ── Instruction label ───────────────────────────────────────────
             if (_cameraReady && !_isAnalysing) _buildInstructionLabel(),
-
-            // ── Orientation toggle for diplomat visa ────────────────────────
-            if (_cameraReady &&
-                !_isAnalysing &&
-                _currentStep == _ScanStep.diplomatVisa)
-              _buildOrientationToggle(),
 
             // ── Previous capture thumbnail(s) ───────────────────────────────
             // Show passport front when on any step after front
@@ -1194,63 +1185,6 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
               fontSize: 13,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Orientation toggle for diplomat visa ──────────────────────────────────
-  Widget _buildOrientationToggle() {
-    return Positioned(
-      // Position it below the instruction label
-      top: MediaQuery.of(context).size.height * 0.22 + 50,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                _diplomatVisaUsePortrait = !_diplomatVisaUsePortrait;
-              });
-            },
-            borderRadius: BorderRadius.circular(25),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.65),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _diplomatVisaUsePortrait
-                        ? Icons.crop_portrait
-                        : Icons.crop_landscape,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _diplomatVisaUsePortrait ? 'Vertical' : 'Horizontal',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.swap_horiz, color: Colors.white70, size: 18),
-                ],
-              ),
             ),
           ),
         ),
