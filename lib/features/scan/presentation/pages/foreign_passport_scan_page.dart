@@ -46,9 +46,12 @@ class ScanRetakeResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum _ScanStep {
-  passportFront, // Step 1 of 3
-  passportBack, // Step 2 of 3 (skippable)
-  visa, // Step 3 of 3
+  passportFront, // Step 1 of 3 or 5
+  passportBack, // Step 2 of 3 or 5 (skippable)
+  visa, // Step 3 of 3 (for eVisa/diplomat flow)
+  ociCardFront, // Step 3 of 5 (for OCI flow)
+  ociCardBack, // Step 4 of 5 (for OCI flow, skippable)
+  ociStampPage, // Step 5 of 5 (for OCI flow, skippable)
 }
 
 extension _ScanStepExt on _ScanStep {
@@ -60,6 +63,12 @@ extension _ScanStepExt on _ScanStep {
         return 'Passport (Back)';
       case _ScanStep.visa:
         return 'Visa';
+      case _ScanStep.ociCardFront:
+        return 'OCI Card (Front)';
+      case _ScanStep.ociCardBack:
+        return 'OCI Card (Back)';
+      case _ScanStep.ociStampPage:
+        return 'OCI Stamp / Endorsement Page';
     }
   }
 
@@ -71,10 +80,65 @@ extension _ScanStepExt on _ScanStep {
         return 'SCAN PASSPORT – BACK';
       case _ScanStep.visa:
         return 'SCAN VISA – FRONT';
+      case _ScanStep.ociCardFront:
+        return 'SCAN OCI CARD – FRONT';
+      case _ScanStep.ociCardBack:
+        return 'SCAN OCI CARD – BACK';
+      case _ScanStep.ociStampPage:
+        return 'SCAN OCI STAMP PAGE';
     }
   }
 
-  int get stepNumber => index + 1;
+  int stepNumber(VisaDocumentType? selectedType) {
+    // For OCI flow, we have 5 steps total
+    if (selectedType == VisaDocumentType.ociCard) {
+      switch (this) {
+        case _ScanStep.passportFront:
+          return 1;
+        case _ScanStep.passportBack:
+          return 2;
+        case _ScanStep.ociCardFront:
+          return 3;
+        case _ScanStep.ociCardBack:
+          return 4;
+        case _ScanStep.ociStampPage:
+          return 5;
+        case _ScanStep.visa:
+          return 3; // shouldn't happen in OCI flow
+      }
+    }
+    // For regular visa flow, we have 3 steps
+    return index + 1;
+  }
+
+  int totalSteps(VisaDocumentType? selectedType) {
+    if (selectedType == VisaDocumentType.ociCard) {
+      return 5;
+    }
+    return 3;
+  }
+
+  bool get isSkippable {
+    switch (this) {
+      case _ScanStep.passportBack:
+      case _ScanStep.ociCardBack:
+      case _ScanStep.ociStampPage:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool get usesGreenBrackets {
+    switch (this) {
+      case _ScanStep.passportBack:
+      case _ScanStep.ociCardBack:
+      case _ScanStep.ociStampPage:
+        return true;
+      default:
+        return false;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +190,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   String? _frontImagePath;
   String? _backImagePath;
   String? _visaImagePath;
+  String? _ociCardFrontImagePath;
+  String? _ociCardBackImagePath;
+  String? _ociStampPageImagePath;
 
   // ── Screen size cache (set in build, used by crop) ────────────────────────
   Size? _lastScreenSize;
@@ -133,6 +200,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── OCR results ───────────────────────────────────────────────────────────
   Map<String, dynamic>? _passportOcrData; // merged front+back result
   Map<String, dynamic>? _visaOcrData;
+  Map<String, dynamic>? _ociCardOcrData; // merged front+back result
+  Map<String, dynamic>? _ociStampOcrData;
 
   final _repo = PassportRepository();
   final _picker = ImagePicker();
@@ -261,6 +330,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       _ScanStep.passportFront => 'Crop Passport Front',
       _ScanStep.passportBack => 'Crop Passport Back',
       _ScanStep.visa => 'Crop Visa',
+      _ScanStep.ociCardFront => 'Crop OCI Card Front',
+      _ScanStep.ociCardBack => 'Crop OCI Card Back',
+      _ScanStep.ociStampPage => 'Crop OCI Stamp Page',
     };
 
     final cropped = await ImageCropper().cropImage(
@@ -409,6 +481,18 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         case _ScanStep.visa:
           _visaImagePath = imagePath;
           await _runVisaOcr(imagePath);
+          break;
+        case _ScanStep.ociCardFront:
+          _ociCardFrontImagePath = imagePath;
+          await _runOciCardFrontOcr(imagePath);
+          break;
+        case _ScanStep.ociCardBack:
+          _ociCardBackImagePath = imagePath;
+          await _runOciCardBackOcr(imagePath);
+          break;
+        case _ScanStep.ociStampPage:
+          _ociStampPageImagePath = imagePath;
+          await _runOciStampOcr(imagePath);
           break;
       }
     } finally {
@@ -660,6 +744,68 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     }
   }
 
+  // ── OCI Card OCR methods ───────────────────────────────────────────────────
+
+  Future<void> _runOciCardFrontOcr(String path) async {
+    setState(() => _analysisLabel = 'Extracting OCI card details...');
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractPassport(frontBase64: base64);
+      if (!mounted) return;
+      final data = _extractOcrData(response);
+      if (data != null) {
+        _ociCardOcrData = data;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    // OCI front is not retakeable in current design
+    // Always advance to OCI back step
+    setState(() => _currentStep = _ScanStep.ociCardBack);
+  }
+
+  Future<void> _runOciCardBackOcr(String path) async {
+    setState(() => _analysisLabel = 'Extracting OCI card details...');
+    Map<String, dynamic>? data;
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractPassport(frontBase64: base64);
+      if (!mounted) return;
+      data = _extractOcrData(response);
+      if (data != null) {
+        // Merge back OCR into existing front OCR (front values win on conflict)
+        if (_ociCardOcrData != null) {
+          final merged = <String, dynamic>{...data, ..._ociCardOcrData!};
+          _ociCardOcrData = merged;
+        } else {
+          _ociCardOcrData = data;
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    // Always advance to stamp page step
+    setState(() => _currentStep = _ScanStep.ociStampPage);
+  }
+
+  Future<void> _runOciStampOcr(String path) async {
+    setState(() => _analysisLabel = 'Extracting OCI stamp details...');
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractVisa(visaBase64: base64);
+      if (!mounted) return;
+
+      final data = _extractOcrData(response);
+      if (data != null) {
+        _ociStampOcrData = data;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    // OCI stamp captured — navigate to form with all data
+    _navigateToForm();
+  }
+
   /// Extract the nested data map from an OCR response.
   /// Returns null if the response indicates failure.
   Map<String, dynamic>? _extractOcrData(Map<String, dynamic>? response) {
@@ -700,9 +846,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         break;
 
       case VisaDocumentType.ociCard:
-        // OCI not yet implemented — show snackbar and navigate to form
-        _showSnack('OCI Card scanning coming soon. Proceeding to form.');
-        _navigateToForm();
+        // Start OCI card scanning flow (3 steps: front, back, stamp)
+        setState(() => _currentStep = _ScanStep.ociCardFront);
         break;
 
       case VisaDocumentType.noVisa:
@@ -712,10 +857,32 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     }
   }
 
-  // ── Skip back page ─────────────────────────────────────────────────────────
+  // ── Skip current step ──────────────────────────────────────────────────────
   void _skipCurrentStep() {
-    if (_currentStep != _ScanStep.passportBack) return;
-    setState(() => _currentStep = _ScanStep.visa);
+    switch (_currentStep) {
+      case _ScanStep.passportBack:
+        // Skipping passport back — check if we're in OCI flow or regular flow
+        if (_selectedVisaDocType == VisaDocumentType.ociCard) {
+          setState(() => _currentStep = _ScanStep.ociCardFront);
+        } else {
+          setState(() => _currentStep = _ScanStep.visa);
+        }
+        break;
+
+      case _ScanStep.ociCardBack:
+        // Skip OCI back → go to stamp page
+        setState(() => _currentStep = _ScanStep.ociStampPage);
+        break;
+
+      case _ScanStep.ociStampPage:
+        // Skip OCI stamp → navigate to form with collected data
+        _navigateToForm();
+        break;
+
+      default:
+        // Other steps are not skippable
+        break;
+    }
   }
 
   // ── Navigate to form ───────────────────────────────────────────────────────
@@ -794,7 +961,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             // ── Instruction label ───────────────────────────────────────────
             if (_cameraReady && !_isAnalysing) _buildInstructionLabel(),
 
-            // ── Previous capture thumbnail (step 2+) ────────────────────────
+            // ── Previous capture thumbnail(s) ───────────────────────────────
+            // Show passport front when on any step after front
             if (_currentStep != _ScanStep.passportFront &&
                 _frontImagePath != null)
               Positioned(
@@ -807,16 +975,58 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 ),
               ),
 
-            // ── Skip button (back step only) ────────────────────────────────
+            // Show OCI front when on OCI back or stamp steps
+            if ((_currentStep == _ScanStep.ociCardBack ||
+                    _currentStep == _ScanStep.ociStampPage) &&
+                _ociCardFrontImagePath != null)
+              Positioned(
+                top: 72,
+                left: 12,
+                child: _CapturedThumbnail(
+                  imagePath: _ociCardFrontImagePath!,
+                  label: 'OCI Front ✓',
+                  onRetake: () {
+                    setState(() {
+                      _ociCardFrontImagePath = null;
+                      _currentStep = _ScanStep.ociCardFront;
+                    });
+                  },
+                ),
+              ),
+
+            // Show OCI back when on stamp step (if captured)
+            if (_currentStep == _ScanStep.ociStampPage &&
+                _ociCardBackImagePath != null)
+              Positioned(
+                top: 130, // Below the front thumbnail
+                left: 12,
+                child: _CapturedThumbnail(
+                  imagePath: _ociCardBackImagePath!,
+                  label: 'OCI Back ✓',
+                  onRetake: () {
+                    setState(() {
+                      _ociCardBackImagePath = null;
+                      _currentStep = _ScanStep.ociCardBack;
+                    });
+                  },
+                ),
+              ),
+
+            // ── Skip button (skippable steps only) ──────────────────────────
             // Skip is only available in full flow (not retake mode)
-            if (_currentStep == _ScanStep.passportBack &&
+            if (_currentStep.isSkippable &&
                 !_isAnalysing &&
                 widget.retakeTarget == null)
               Positioned(
                 bottom: 100,
                 left: 20,
                 right: 20,
-                child: _SkipButton(onTap: _skipCurrentStep),
+                child: _SkipButton(
+                  onTap: _skipCurrentStep,
+                  secondaryText: _currentStep == _ScanStep.passportBack
+                      ? 'Not every passport has a printed back/last page'
+                      : 'Skip if not available',
+                ),
               ),
 
             // ── Bottom controls ─────────────────────────────────────────────
@@ -882,7 +1092,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           Text(
             widget.retakeTarget != null
                 ? 'Retake · ${_currentStep.label}'
-                : 'Step ${_currentStep.stepNumber} of 3 · ${_currentStep.label}',
+                : 'Step ${_currentStep.stepNumber} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 17,
@@ -972,8 +1182,8 @@ class _ScanOverlay extends StatelessWidget {
     final rectTop = size.height * 0.30;
 
     // Choose bracket colour per step
-    final bracketColor = step == _ScanStep.passportBack
-        ? const Color(0xFF4CAF50) // green for back page
+    final bracketColor = step.usesGreenBrackets
+        ? const Color(0xFF4CAF50) // green for back pages and OCI back/stamp
         : AppColors.accent; // golden for front / visa
 
     return Stack(
@@ -1241,7 +1451,12 @@ class _AnalysisCardState extends State<_AnalysisCard>
 
 class _SkipButton extends StatelessWidget {
   final VoidCallback onTap;
-  const _SkipButton({required this.onTap});
+  final String secondaryText;
+
+  const _SkipButton({
+    required this.onTap,
+    this.secondaryText = 'Skip if not available',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1255,9 +1470,9 @@ class _SkipButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            Text(
+            const Text(
               'Skip this step',
               style: TextStyle(
                 color: Colors.white,
@@ -1265,10 +1480,10 @@ class _SkipButton extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
-              'Not every passport has a printed back/last page',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              secondaryText,
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
             ),
           ],
         ),
