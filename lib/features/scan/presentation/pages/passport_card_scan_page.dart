@@ -40,6 +40,9 @@ class PassportCardScanPage extends StatefulWidget {
   /// Pre-filled visa stamp page image path (for OCI stamp page).
   final String? initialVisaImageStampPath;
 
+  /// The visa document type selected in ForeignPassportScanPage dialog.
+  final String? selectedVisaDocumentType;
+
   /// When provided, these OCR results will be used to pre-fill the form
   /// without running OCR again (from [ForeignPassportScanPage]).
   final Map<String, dynamic>? initialPassportOcrData;
@@ -71,6 +74,7 @@ class PassportCardScanPage extends StatefulWidget {
     this.initialVisaImagePath,
     this.initialVisaImageBackPath,
     this.initialVisaImageStampPath,
+    this.selectedVisaDocumentType,
     this.initialPassportOcrData,
     this.initialVisaOcrData,
     this.skipExtraction = false,
@@ -242,29 +246,43 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         if (widget.initialVisaOcrData != null) {
           _fillVisaFromOcr(widget.initialVisaOcrData!);
         }
-        // Auto-select visa type based on captured images
-        if (widget.initialVisaImagePath != null && _visaType.isEmpty) {
+        // Auto-select visa type based on selected type from dialog or captured images
+        if (_visaType.isEmpty) {
           setState(() {
-            // Detect visa type based on which images were captured
-            if (widget.initialVisaImageBackPath != null ||
-                widget.initialVisaImageStampPath != null) {
-              // OCI card flow (has back or stamp page)
-              _visaType = 'OCI';
-              _selectedDropVisaType = _visaDropTypes
-                  .where((v) => v.visaId == 'OCI')
-                  .firstOrNull;
-            } else {
-              // Regular e-Visa or Diplomat (check if OCR data exists)
-              // If no OCR data, it's likely a Diplomat visa
-              _visaType = widget.initialVisaOcrData != null
-                  ? 'e-Visa'
-                  : 'e-Visa';
-              _selectedDropVisaType = _visaDropTypes
-                  .where((v) => v.visaId == 'EV')
-                  .firstOrNull;
+            // Priority 1: Use the explicitly selected type from dialog
+            if (widget.selectedVisaDocumentType != null) {
+              _visaType = widget.selectedVisaDocumentType!;
+              // Find matching dropdown visa type
+              if (_visaType == 'OCI') {
+                _selectedDropVisaType = _visaDropTypes
+                    .where((v) => v.visaId == 'OCI')
+                    .firstOrNull;
+              } else if (_visaType == 'e-Visa' || _visaType == 'Diplomat') {
+                _selectedDropVisaType = _visaDropTypes
+                    .where((v) => v.visaId == 'EV')
+                    .firstOrNull;
+              }
+            }
+            // Priority 2: Detect from captured images if no explicit type
+            else if (widget.initialVisaImagePath != null) {
+              if (widget.initialVisaImageBackPath != null ||
+                  widget.initialVisaImageStampPath != null) {
+                // OCI card flow (has back or stamp page)
+                _visaType = 'OCI';
+                _selectedDropVisaType = _visaDropTypes
+                    .where((v) => v.visaId == 'OCI')
+                    .firstOrNull;
+              } else {
+                // Regular e-Visa or Diplomat
+                _visaType = 'e-Visa';
+                _selectedDropVisaType = _visaDropTypes
+                    .where((v) => v.visaId == 'EV')
+                    .firstOrNull;
+              }
             }
 
-            if (_countries.isNotEmpty) {
+            // Set default visa country to India
+            if (_countries.isNotEmpty && _visaType.isNotEmpty) {
               _selectedVisaCountry = _countries
                   .where((c) => c.code == 'IND')
                   .firstOrNull;

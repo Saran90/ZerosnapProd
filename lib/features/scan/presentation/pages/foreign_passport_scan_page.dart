@@ -933,6 +933,17 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   void _navigateToForm() {
     if (!mounted) return;
 
+    // Convert VisaDocumentType enum to form's visa type string
+    String? visaTypeForForm;
+    if (_selectedVisaDocType != null) {
+      visaTypeForForm = switch (_selectedVisaDocType!) {
+        VisaDocumentType.eVisa => 'e-Visa',
+        VisaDocumentType.ociCard => 'OCI',
+        VisaDocumentType.diplomatPassport => 'Diplomat',
+        VisaDocumentType.noVisa => null, // Don't set visa type for "No Visa"
+      };
+    }
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -943,6 +954,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           initialVisaImagePath: _visaImagePath,
           initialVisaImageBackPath: _ociCardBackImagePath,
           initialVisaImageStampPath: _ociStampPageImagePath,
+          selectedVisaDocumentType: visaTypeForForm,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
           skipExtraction: true,
