@@ -10,7 +10,7 @@ plugins {
 android {
     namespace = "com.intellilabs.processfriendly"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -30,6 +30,15 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    // Required for Android 16 KB page size compatibility (Android 15+).
+    // Ensures .so files are stored uncompressed and page-aligned in the APK,
+    // allowing the OS to mmap them directly from the archive.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
     buildTypes {
