@@ -1737,6 +1737,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       icon: Icons.flight_outlined,
       title: 'TRAVEL DETAILS',
       children: [
+        if (_purposes.isNotEmpty)
+          _SearchableDropdown<Purpose>(
+            label: 'Purpose of visit',
+            items: _purposes,
+            selected: _selectedPurpose,
+            itemLabel: (p) => p.purposeName,
+            onChanged: (p) => setState(() => _selectedPurpose = p),
+          ),
         // Arrival in India — 70/30 date + time split
         Row(
           children: [
