@@ -1306,7 +1306,6 @@ class _ImageTile extends StatelessWidget {
   final String label;
   final String imagePath;
   final VoidCallback onTap;
-  final VoidCallback? onRemove;
   final IconData icon;
   final bool fullWidth;
   final BoxFit fit;
@@ -1315,7 +1314,6 @@ class _ImageTile extends StatelessWidget {
     required this.label,
     required this.imagePath,
     required this.onTap,
-    this.onRemove,
     this.icon = Icons.add_photo_alternate_outlined,
     this.fullWidth = false,
     this.fit = BoxFit.cover,
@@ -1386,26 +1384,6 @@ class _ImageTile extends StatelessWidget {
                   child: const Icon(Icons.check, color: Colors.white, size: 12),
                 ),
               ),
-            if (hasImage && onRemove != null)
-              Positioned(
-                top: 4,
-                left: 4,
-                child: GestureDetector(
-                  onTap: onRemove,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -1418,18 +1396,14 @@ class _FormField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType keyboardType;
   final bool required;
-  final int maxLines;
   final List<TextInputFormatter>? inputFormatters;
-  final bool? readOnly;
 
   const _FormField({
     required this.label,
     required this.controller,
     this.keyboardType = TextInputType.text,
     this.required = false,
-    this.maxLines = 1,
     this.inputFormatters,
-    this.readOnly,
   });
 
   @override
@@ -1439,8 +1413,6 @@ class _FormField extends StatelessWidget {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        maxLines: maxLines,
-        readOnly: readOnly ?? false,
         inputFormatters: inputFormatters,
         decoration: InputDecoration(
           label: RichText(

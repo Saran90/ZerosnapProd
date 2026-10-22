@@ -1650,7 +1650,6 @@ class _FormField extends StatelessWidget {
   final bool required;
   final int maxLines;
   final List<TextInputFormatter>? inputFormatters;
-  final bool? readOnly;
 
   const _FormField({
     required this.label,
@@ -1659,7 +1658,6 @@ class _FormField extends StatelessWidget {
     this.required = false,
     this.maxLines = 1,
     this.inputFormatters,
-    this.readOnly,
   });
 
   @override
@@ -1670,7 +1668,6 @@ class _FormField extends StatelessWidget {
         controller: controller,
         keyboardType: keyboardType,
         maxLines: maxLines,
-        readOnly: readOnly ?? false,
         inputFormatters: inputFormatters,
         decoration: InputDecoration(
           label: RichText(
@@ -2095,18 +2092,12 @@ class _ImageTile extends StatelessWidget {
   final String? imagePath;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
-  final IconData icon;
-  final bool fullWidth;
-  final BoxFit fit;
 
   const _ImageTile({
     required this.label,
     required this.imagePath,
     required this.onTap,
     this.onRemove,
-    this.icon = Icons.add_photo_alternate_outlined,
-    this.fullWidth = false,
-    this.fit = BoxFit.cover,
   });
 
   @override
@@ -2115,7 +2106,6 @@ class _ImageTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: fullWidth ? double.infinity : null,
         height: 110,
         child: Stack(
           children: [
@@ -2127,7 +2117,7 @@ class _ImageTile extends StatelessWidget {
                         border: Border.all(color: AppColors.primary, width: 2),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: Image.file(File(imagePath!), fit: fit),
+                      child: Image.file(File(imagePath!), fit: BoxFit.cover),
                     )
                   : CustomPaint(
                       painter: _DashedBorderPainter(
@@ -2145,7 +2135,11 @@ class _ImageTile extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(icon, color: Colors.grey[400], size: 32),
+                            Icon(
+                              Icons.add_photo_alternate_outlined,
+                              color: Colors.grey[400],
+                              size: 32,
+                            ),
                             const SizedBox(height: 6),
                             Text(
                               label,
