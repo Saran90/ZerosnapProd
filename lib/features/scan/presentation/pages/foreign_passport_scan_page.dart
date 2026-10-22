@@ -1069,7 +1069,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             // ── OCI orientation toggle (OCI front step only) ────────────────
             if (_currentStep == _ScanStep.ociCardFront && !_isAnalysing)
               Positioned(
-                top: MediaQuery.of(context).size.height * 0.24,
+                bottom: 110, // sits above the shutter/gallery controls
                 left: 0,
                 right: 0,
                 child: Center(
