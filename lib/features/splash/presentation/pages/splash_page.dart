@@ -99,41 +99,42 @@ class _SplashPageState extends State<SplashPage>
             ),
 
             // ── Bottom branding pinned to bottom ─────────────────────
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 44),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Powered by text
-                    const Text(
-                      'Powered by',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF757575),
-                        letterSpacing: 0.5,
-                      ),
+            Positioned(
+              bottom: 44,
+              left: 0,
+              right: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Powered by text
+                  const Text(
+                    'Powered by',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF757575),
+                      letterSpacing: 0.5,
                     ),
-                    const SizedBox(height: 0),
-                    // Intellilabs logo
-                    Image.asset(
-                      'assets/images/intellilabs_logo.png',
-                      width: 180,
-                      fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 0),
+                  // Intellilabs logo
+                  // Intellilabs logo — AspectRatio 5:1 ensures the full
+                  Image.asset(
+                    'assets/images/intellilabs_logo.png',
+                    height: 80,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 4),
+                  // Version text
+                  const VersionText(
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9E9E9E),
+                      letterSpacing: 0.2,
                     ),
-                    const SizedBox(height: 4),
-                    // Version text
-                    const VersionText(
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF9E9E9E),
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
