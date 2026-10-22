@@ -290,9 +290,22 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _visaDropTypes = results[1] as List<VisaType>;
         _states = results[2] as List<IndianState>;
         _purposes = results[3] as List<Purpose>;
-        _selectedDropVisaType = _visaDropTypes
-            .where((v) => v.visaId == 'T')
-            .firstOrNull;
+        // Only set default visa drop type if no visa was pre-selected from
+        // the scan page. If _visaType is already set (e-Visa / OCI / Diplomat),
+        // re-apply the correct mapping now that the list is loaded.
+        if (_visaType.isEmpty) {
+          _selectedDropVisaType = _visaDropTypes
+              .where((v) => v.visaId == 'T')
+              .firstOrNull;
+        } else if (_visaType == 'OCI') {
+          _selectedDropVisaType = _visaDropTypes
+              .where((v) => v.visaId == 'OCI')
+              .firstOrNull;
+        } else if (_visaType == 'e-Visa' || _visaType == 'Diplomat') {
+          _selectedDropVisaType = _visaDropTypes
+              .where((v) => v.visaId == 'EV')
+              .firstOrNull;
+        }
       });
     } catch (_) {}
   }
