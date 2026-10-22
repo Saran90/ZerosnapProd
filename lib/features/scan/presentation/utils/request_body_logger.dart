@@ -16,9 +16,9 @@ class RequestBodyLogger {
     // Create a copy and replace base64 images with placeholders
     final bodyForPrint = _replaceBase64WithPlaceholders(body, [
       'passportFile',
-      'passportBackFile',
+      'IdBackFile',
       'profileImageFile',
-      'User_Signature',
+      'GuestSignatureFile',
       'visaFile',
       'visaFile2',
       'visaFile3',

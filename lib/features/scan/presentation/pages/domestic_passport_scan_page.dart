@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../data/repositories/passport_repository.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/passport_portrait_extractor.dart';
 import 'foreign_passport_scan_page.dart';
 import 'passport_card_scan_page.dart';
 
@@ -89,6 +90,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
   String? _backImagePath;
+  String? _profileImagePath;
 
   // ── Screen size cache ──────────────────────────────────────────────────────
   Size? _lastScreenSize;
@@ -109,6 +111,8 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
     };
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
+    // Always start fresh — no profile image from a previous session.
+    _profileImagePath = null;
   }
 
   @override
@@ -342,6 +346,15 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
       final data = _extractOcrData(response);
       if (data != null) _passportOcrData = data;
     } catch (_) {}
+
+    // Auto-extract profile portrait from passport front
+    if (mounted) {
+      final profilePath = await extractPassportPortrait(path);
+      if (profilePath != null) {
+        _profileImagePath = profilePath;
+      }
+    }
+
     if (!mounted) return;
 
     if (widget.retakeTarget != null) {
@@ -350,6 +363,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
           target: ScanRetakeTarget.passportFront,
           imagePath: path,
           ocrData: _passportOcrData,
+          profileImagePath: _profileImagePath,
         ),
       );
     } else {
@@ -412,6 +426,7 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
           initialPassportOcrData: _passportOcrData,
+          initialProfileImagePath: _profileImagePath,
         ),
       ),
     );

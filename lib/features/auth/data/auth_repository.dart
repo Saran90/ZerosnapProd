@@ -54,7 +54,7 @@ class AuthRepository {
 
     if (result.success && result.session != null) {
       await _prefs.saveLoginSession(result.session!);
-      FirebaseLogger.instance.setContext(
+      await FirebaseLogger.instance.setContext(
         userEmail: result.session!.userEmail,
         username: result.session!.username,
         journeyName: 'login',

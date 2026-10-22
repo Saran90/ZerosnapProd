@@ -10,6 +10,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/passport_portrait_extractor.dart';
 import '../../data/repositories/passport_repository.dart';
 import 'passport_card_scan_page.dart';
 
@@ -18,7 +19,17 @@ import 'passport_card_scan_page.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Which image was retaken in single-step mode.
-enum ScanRetakeTarget { passportFront, passportBack, visa }
+enum ScanRetakeTarget {
+  passportFront,
+  passportBack,
+  visa,
+  ociCardFront,
+  ociCardBack,
+  ociStampPage,
+}
+
+/// Type of visa or entry document selected by the user.
+enum VisaDocumentType { eVisa, ociCard, diplomatPassport, noVisa }
 
 /// The data returned when [ForeignPassportScanPage] is used in retake mode.
 class ScanRetakeResult {
@@ -31,10 +42,14 @@ class ScanRetakeResult {
   /// OCR data extracted from the image, or null if extraction failed.
   final Map<String, dynamic>? ocrData;
 
+  /// Auto-extracted profile portrait path (only populated for passportFront target).
+  final String? profileImagePath;
+
   const ScanRetakeResult({
     required this.target,
     required this.imagePath,
     this.ocrData,
+    this.profileImagePath,
   });
 }
 
@@ -43,9 +58,13 @@ class ScanRetakeResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum _ScanStep {
-  passportFront, // Step 1 of 3
-  passportBack, // Step 2 of 3 (skippable)
-  visa, // Step 3 of 3
+  passportFront, // Step 1 of 3 or 5
+  passportBack, // Step 2 of 3 or 5 (skippable)
+  visa, // Step 3 of 3 (for eVisa flow)
+  diplomatVisa, // Step 3 of 3 (for diplomat flow, skippable)
+  ociCardFront, // Step 3 of 5 (for OCI flow)
+  ociCardBack, // Step 4 of 5 (for OCI flow, skippable)
+  ociStampPage, // Step 5 of 5 (for OCI flow, skippable)
 }
 
 extension _ScanStepExt on _ScanStep {
@@ -57,6 +76,14 @@ extension _ScanStepExt on _ScanStep {
         return 'Passport (Back)';
       case _ScanStep.visa:
         return 'Visa';
+      case _ScanStep.diplomatVisa:
+        return 'Diplomat Visa (Optional)';
+      case _ScanStep.ociCardFront:
+        return 'OCI Card (Front)';
+      case _ScanStep.ociCardBack:
+        return 'OCI Card (Back)';
+      case _ScanStep.ociStampPage:
+        return 'OCI Stamp / Endorsement Page';
     }
   }
 
@@ -68,10 +95,70 @@ extension _ScanStepExt on _ScanStep {
         return 'SCAN PASSPORT – BACK';
       case _ScanStep.visa:
         return 'SCAN VISA – FRONT';
+      case _ScanStep.diplomatVisa:
+        return 'SCAN DIPLOMAT VISA – FRONT';
+      case _ScanStep.ociCardFront:
+        return 'SCAN OCI CARD – FRONT';
+      case _ScanStep.ociCardBack:
+        return 'SCAN OCI CARD – BACK';
+      case _ScanStep.ociStampPage:
+        return 'SCAN OCI STAMP PAGE';
     }
   }
 
-  int get stepNumber => index + 1;
+  int stepNumber(VisaDocumentType? selectedType) {
+    // For OCI flow, we have 5 steps total
+    if (selectedType == VisaDocumentType.ociCard) {
+      switch (this) {
+        case _ScanStep.passportFront:
+          return 1;
+        case _ScanStep.passportBack:
+          return 2;
+        case _ScanStep.ociCardFront:
+          return 3;
+        case _ScanStep.ociCardBack:
+          return 4;
+        case _ScanStep.ociStampPage:
+          return 5;
+        case _ScanStep.visa:
+        case _ScanStep.diplomatVisa:
+          return 3; // shouldn't happen in OCI flow
+      }
+    }
+    // For regular visa/diplomat flow, we have 3 steps
+    // diplomat visa is also step 3
+    return this == _ScanStep.diplomatVisa ? 3 : index + 1;
+  }
+
+  int totalSteps(VisaDocumentType? selectedType) {
+    if (selectedType == VisaDocumentType.ociCard) {
+      return 5;
+    }
+    return 3;
+  }
+
+  bool get isSkippable {
+    switch (this) {
+      case _ScanStep.passportBack:
+      case _ScanStep.diplomatVisa:
+      case _ScanStep.ociCardBack:
+      case _ScanStep.ociStampPage:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool get usesGreenBrackets {
+    switch (this) {
+      case _ScanStep.passportBack:
+      case _ScanStep.ociCardBack:
+      case _ScanStep.ociStampPage:
+        return true;
+      default:
+        return false;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,10 +203,21 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   double _elapsedSeconds = 0;
   Timer? _elapsedTimer;
 
+  // ── Selected visa document type ────────────────────────────────────────────
+  VisaDocumentType? _selectedVisaDocType;
+
+  // ── OCI front scan orientation toggle ─────────────────────────────────────
+  // false = landscape (card held horizontally), true = portrait (card held vertically)
+  bool _ociPortrait = false;
+
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
   String? _backImagePath;
   String? _visaImagePath;
+  String? _ociCardFrontImagePath;
+  String? _ociCardBackImagePath;
+  String? _ociStampPageImagePath;
+  String? _profileImagePath;
 
   // ── Screen size cache (set in build, used by crop) ────────────────────────
   Size? _lastScreenSize;
@@ -127,6 +225,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── OCR results ───────────────────────────────────────────────────────────
   Map<String, dynamic>? _passportOcrData; // merged front+back result
   Map<String, dynamic>? _visaOcrData;
+  Map<String, dynamic>? _ociCardOcrData; // merged front+back result
+  Map<String, dynamic>? _ociStampOcrData;
 
   final _repo = PassportRepository();
   final _picker = ImagePicker();
@@ -140,10 +240,16 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       ScanRetakeTarget.passportFront => _ScanStep.passportFront,
       ScanRetakeTarget.passportBack => _ScanStep.passportBack,
       ScanRetakeTarget.visa => _ScanStep.visa,
+      ScanRetakeTarget.ociCardFront => _ScanStep.ociCardFront,
+      ScanRetakeTarget.ociCardBack => _ScanStep.ociCardBack,
+      ScanRetakeTarget.ociStampPage => _ScanStep.ociStampPage,
       null => _ScanStep.passportFront,
     };
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
+    // Always start fresh — no profile image from a previous session.
+    // _profileImagePath stays null until extractPassportPortrait succeeds.
+    _profileImagePath = null;
   }
 
   @override
@@ -255,6 +361,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       _ScanStep.passportFront => 'Crop Passport Front',
       _ScanStep.passportBack => 'Crop Passport Back',
       _ScanStep.visa => 'Crop Visa',
+      _ScanStep.diplomatVisa => 'Crop Diplomat Visa',
+      _ScanStep.ociCardFront => 'Crop OCI Card Front',
+      _ScanStep.ociCardBack => 'Crop OCI Card Back',
+      _ScanStep.ociStampPage => 'Crop OCI Stamp Page',
     };
 
     final cropped = await ImageCropper().cropImage(
@@ -346,8 +456,24 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final offsetY = (renderedH - screenH) / 2;
 
       // ── 5. Scan rect in screen coordinates ────────────────────────────────
-      final rectW = screenW * 0.88;
-      final rectH = rectW * 0.66;
+      // Use portrait or landscape based on current step
+      final double rectW;
+      final double rectH;
+
+      if (_currentStep == _ScanStep.diplomatVisa) {
+        // Portrait orientation for diplomat visa (2:3 ratio) - always vertical
+        rectW = screenW * 0.70;
+        rectH = rectW * 1.5;
+      } else if (_currentStep == _ScanStep.ociCardFront && _ociPortrait) {
+        // Portrait orientation for OCI front when user toggled to portrait
+        rectW = screenW * 0.70;
+        rectH = rectW * 1.5;
+      } else {
+        // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
+        rectW = screenW * 0.88;
+        rectH = rectW * 0.66;
+      }
+
       final rectLeft = (screenW - rectW) / 2;
       final rectTop = screenH * 0.30;
 
@@ -403,7 +529,26 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         case _ScanStep.visa:
           _visaImagePath = imagePath;
           await _runVisaOcr(imagePath);
+          // Don't stop analyzing - let the method handle it
+          return;
+        case _ScanStep.diplomatVisa:
+          _visaImagePath = imagePath;
+          await _runDiplomatVisaOcr(imagePath);
+          // Don't stop analyzing - let the method handle it
+          return;
+        case _ScanStep.ociCardFront:
+          _ociCardFrontImagePath = imagePath;
+          await _runOciCardFrontOcr(imagePath);
           break;
+        case _ScanStep.ociCardBack:
+          _ociCardBackImagePath = imagePath;
+          await _runOciCardBackOcr(imagePath);
+          break;
+        case _ScanStep.ociStampPage:
+          _ociStampPageImagePath = imagePath;
+          await _runOciStampOcr(imagePath);
+          // Don't stop analyzing - let the method handle it
+          return;
       }
     } finally {
       _stopElapsedTimer();
@@ -424,6 +569,15 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         _passportOcrData = data;
       }
     } catch (_) {}
+
+    // Auto-extract profile portrait from passport front
+    if (mounted) {
+      final profilePath = await extractPassportPortrait(path);
+      if (profilePath != null) {
+        _profileImagePath = profilePath;
+      }
+    }
+
     if (!mounted) return;
 
     if (widget.retakeTarget != null) {
@@ -433,6 +587,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           target: ScanRetakeTarget.passportFront,
           imagePath: path,
           ocrData: _passportOcrData,
+          profileImagePath: _profileImagePath,
         ),
       );
     } else {
@@ -471,8 +626,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         ),
       );
     } else {
-      // Full flow — advance to visa step
-      setState(() => _currentStep = _ScanStep.visa);
+      // Full flow — show visa type selection dialog
+      await _showVisaTypeSelectionDialog();
     }
   }
 
@@ -488,6 +643,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         _visaOcrData = data;
         if (widget.retakeTarget != null) {
           // Retake mode — pop back with the visa result
+          _stopElapsedTimer();
+          setState(() => _isAnalysing = false);
           Navigator.of(context).pop(
             ScanRetakeResult(
               target: ScanRetakeTarget.visa,
@@ -496,10 +653,19 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             ),
           );
         } else {
+          // Stop animation BEFORE navigation so dialog is dismissed
+          _stopElapsedTimer();
+          setState(() => _isAnalysing = false);
+          // Small delay to ensure dialog dismisses before navigation
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (!mounted) return;
           _navigateToForm();
         }
       } else {
-        // API returned a non-200 code — surface the message to the user
+        // API returned a non-200 code — stop animation and show error
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+
         final message =
             response?['message'] as String? ??
             response?['Message'] as String? ??
@@ -507,8 +673,56 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         await _showVisaErrorDialog(message, retakePath: path);
       }
     } catch (e) {
+      // Error - stop animation and show dialog
+      _stopElapsedTimer();
       if (mounted) {
+        setState(() => _isAnalysing = false);
         await _showVisaErrorDialog('Visa scan failed: $e', retakePath: path);
+      }
+    }
+  }
+
+  /// Runs OCR extraction for diplomat visa.
+  /// Similar to e-Visa flow with API call and error handling.
+  Future<void> _runDiplomatVisaOcr(String path) async {
+    setState(() => _analysisLabel = 'Extracting diplomat visa details...');
+    try {
+      final base64 = base64Encode(await File(path).readAsBytes());
+      final response = await _repo.extractVisa(visaBase64: base64);
+      if (!mounted) return;
+
+      final data = _extractOcrData(response);
+      if (data != null) {
+        _visaOcrData = data;
+        _visaImagePath = path;
+
+        // Stop animation BEFORE navigation so dialog is dismissed
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+        // Small delay to ensure dialog dismisses before navigation
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+        _navigateToForm();
+      } else {
+        // API returned a non-200 code — stop animation and show error
+        _stopElapsedTimer();
+        setState(() => _isAnalysing = false);
+
+        final message =
+            response?['message'] as String? ??
+            response?['Message'] as String? ??
+            'Could not extract diplomat visa details.';
+        await _showVisaErrorDialog(message, retakePath: path);
+      }
+    } catch (e) {
+      // Error - stop animation and show dialog
+      _stopElapsedTimer();
+      if (mounted) {
+        setState(() => _isAnalysing = false);
+        await _showVisaErrorDialog(
+          'Diplomat visa scan failed: $e',
+          retakePath: path,
+        );
       }
     }
   }
@@ -654,6 +868,75 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     }
   }
 
+  // ── OCI Card OCR methods ───────────────────────────────────────────────────
+
+  Future<void> _runOciCardFrontOcr(String path) async {
+    // OCI doesn't need OCR extraction - just store the path and advance
+    _ociCardFrontImagePath = path;
+
+    if (!mounted) return;
+
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      Navigator.of(context).pop(
+        ScanRetakeResult(
+          target: ScanRetakeTarget.ociCardFront,
+          imagePath: path,
+        ),
+      );
+    } else {
+      // Always advance to OCI back step
+      setState(() => _currentStep = _ScanStep.ociCardBack);
+    }
+  }
+
+  Future<void> _runOciCardBackOcr(String path) async {
+    // OCI doesn't need OCR extraction - just store the path and advance
+    _ociCardBackImagePath = path;
+
+    if (!mounted) return;
+
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      Navigator.of(context).pop(
+        ScanRetakeResult(target: ScanRetakeTarget.ociCardBack, imagePath: path),
+      );
+    } else {
+      // Always advance to stamp page step
+      setState(() => _currentStep = _ScanStep.ociStampPage);
+    }
+  }
+
+  Future<void> _runOciStampOcr(String path) async {
+    // OCI doesn't need OCR extraction - just store the path
+    _ociStampPageImagePath = path;
+
+    if (!mounted) return;
+
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      _stopElapsedTimer();
+      setState(() => _isAnalysing = false);
+      Navigator.of(context).pop(
+        ScanRetakeResult(
+          target: ScanRetakeTarget.ociStampPage,
+          imagePath: path,
+        ),
+      );
+    } else {
+      // Stop animation and navigate to form
+      _stopElapsedTimer();
+      setState(() => _isAnalysing = false);
+
+      // Small delay to ensure dialog dismisses before navigation
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+
+      // OCI stamp captured — navigate to form with all data
+      _navigateToForm();
+    }
+  }
+
   /// Extract the nested data map from an OCR response.
   /// Returns null if the response indicates failure.
   Map<String, dynamic>? _extractOcrData(Map<String, dynamic>? response) {
@@ -665,15 +948,103 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     return null;
   }
 
-  // ── Skip back page ─────────────────────────────────────────────────────────
+  // ── Visa type selection dialog ─────────────────────────────────────────────
+
+  /// Shows a dialog allowing the user to select which type of visa/entry
+  /// document should be captured next.
+  /// Returns when the user makes a selection or dismisses the dialog.
+  Future<void> _showVisaTypeSelectionDialog() async {
+    final result = await showDialog<VisaDocumentType>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => const _VisaTypeSelectionDialog(),
+    );
+
+    if (!mounted) return;
+
+    // User dismissed dialog — stay on back step
+    if (result == null) return;
+
+    // Store the selection
+    setState(() => _selectedVisaDocType = result);
+
+    // Handle each option
+    switch (result) {
+      case VisaDocumentType.eVisa:
+        // Advance to regular visa scanning step
+        setState(() => _currentStep = _ScanStep.visa);
+        break;
+
+      case VisaDocumentType.diplomatPassport:
+        // Advance to diplomat visa scanning step (skippable, portrait orientation)
+        setState(() => _currentStep = _ScanStep.diplomatVisa);
+        break;
+
+      case VisaDocumentType.ociCard:
+        // Start OCI card scanning flow (3 steps: front, back, stamp)
+        setState(() => _currentStep = _ScanStep.ociCardFront);
+        break;
+
+      case VisaDocumentType.noVisa:
+        // Skip visa capture and navigate directly to form
+        _navigateToForm();
+        break;
+    }
+  }
+
+  // ── Skip current step ──────────────────────────────────────────────────────
   void _skipCurrentStep() {
-    if (_currentStep != _ScanStep.passportBack) return;
-    setState(() => _currentStep = _ScanStep.visa);
+    switch (_currentStep) {
+      case _ScanStep.passportBack:
+        // Skipping passport back — show visa type selection dialog
+        // The dialog will handle navigation based on user's choice
+        _showVisaTypeSelectionDialog();
+        break;
+
+      case _ScanStep.diplomatVisa:
+        // Skip diplomat visa → navigate to form without visa
+        _navigateToForm();
+        break;
+
+      case _ScanStep.ociCardBack:
+        // Skip OCI back → go to stamp page
+        setState(() => _currentStep = _ScanStep.ociStampPage);
+        break;
+
+      case _ScanStep.ociStampPage:
+        // Skip OCI stamp → navigate to form with collected data
+        _navigateToForm();
+        break;
+
+      default:
+        // Other steps are not skippable
+        break;
+    }
   }
 
   // ── Navigate to form ───────────────────────────────────────────────────────
   void _navigateToForm() {
     if (!mounted) return;
+
+    // Convert VisaDocumentType enum to form's visa type string
+    String? visaTypeForForm;
+    if (_selectedVisaDocType != null) {
+      visaTypeForForm = switch (_selectedVisaDocType!) {
+        VisaDocumentType.eVisa => 'e-Visa',
+        VisaDocumentType.ociCard => 'OCI',
+        VisaDocumentType.diplomatPassport => 'Diplomat',
+        VisaDocumentType.noVisa => null, // Don't set visa type for "No Visa"
+      };
+    }
+
+    // For the OCI flow the front card image is stored in _ociCardFrontImagePath
+    // (not _visaImagePath, which is only set during e-Visa / Diplomat steps).
+    // Pass the correct path so the form page shows the OCI front image tile.
+    final visaImagePathForForm =
+        _selectedVisaDocType == VisaDocumentType.ociCard
+        ? _ociCardFrontImagePath
+        : _visaImagePath;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -681,9 +1052,13 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           pageTitle: 'Passport & VISA',
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
-          initialVisaImagePath: _visaImagePath,
+          initialVisaImagePath: visaImagePathForForm,
+          initialVisaImageBackPath: _ociCardBackImagePath,
+          initialVisaImageStampPath: _ociStampPageImagePath,
+          selectedVisaDocumentType: visaTypeForForm,
           initialPassportOcrData: _passportOcrData,
           initialVisaOcrData: _visaOcrData,
+          initialProfileImagePath: _profileImagePath,
           skipExtraction: true,
         ),
       ),
@@ -736,6 +1111,23 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 isAnalysing: _isAnalysing,
                 analysisLabel: _analysisLabel,
                 elapsedSeconds: _elapsedSeconds,
+                usePortraitForDiplomat: true, // Always portrait for diplomat
+                ociPortrait: _ociPortrait,
+              ),
+
+            // ── OCI orientation toggle (OCI front step only) ────────────────
+            if (_currentStep == _ScanStep.ociCardFront && !_isAnalysing)
+              Positioned(
+                bottom: 110, // sits above the shutter/gallery controls
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _OrientationToggle(
+                    isPortrait: _ociPortrait,
+                    onChanged: (portrait) =>
+                        setState(() => _ociPortrait = portrait),
+                  ),
+                ),
               ),
 
             // ── Top bar ─────────────────────────────────────────────────────
@@ -744,7 +1136,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             // ── Instruction label ───────────────────────────────────────────
             if (_cameraReady && !_isAnalysing) _buildInstructionLabel(),
 
-            // ── Previous capture thumbnail (step 2+) ────────────────────────
+            // ── Previous capture thumbnail(s) ───────────────────────────────
+            // Show passport front when on any step after front
             if (_currentStep != _ScanStep.passportFront &&
                 _frontImagePath != null)
               Positioned(
@@ -757,16 +1150,60 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 ),
               ),
 
-            // ── Skip button (back step only) ────────────────────────────────
+            // Show OCI front when on OCI back or stamp steps
+            if ((_currentStep == _ScanStep.ociCardBack ||
+                    _currentStep == _ScanStep.ociStampPage) &&
+                _ociCardFrontImagePath != null)
+              Positioned(
+                top: 72,
+                left: 12,
+                child: _CapturedThumbnail(
+                  imagePath: _ociCardFrontImagePath!,
+                  label: 'OCI Front ✓',
+                  onRetake: () {
+                    setState(() {
+                      _ociCardFrontImagePath = null;
+                      _currentStep = _ScanStep.ociCardFront;
+                    });
+                  },
+                ),
+              ),
+
+            // Show OCI back when on stamp step (if captured)
+            if (_currentStep == _ScanStep.ociStampPage &&
+                _ociCardBackImagePath != null)
+              Positioned(
+                top: 130, // Below the front thumbnail
+                left: 12,
+                child: _CapturedThumbnail(
+                  imagePath: _ociCardBackImagePath!,
+                  label: 'OCI Back ✓',
+                  onRetake: () {
+                    setState(() {
+                      _ociCardBackImagePath = null;
+                      _currentStep = _ScanStep.ociCardBack;
+                    });
+                  },
+                ),
+              ),
+
+            // ── Skip button (skippable steps only) ──────────────────────────
             // Skip is only available in full flow (not retake mode)
-            if (_currentStep == _ScanStep.passportBack &&
+            if (_currentStep.isSkippable &&
                 !_isAnalysing &&
                 widget.retakeTarget == null)
               Positioned(
                 bottom: 100,
                 left: 20,
                 right: 20,
-                child: _SkipButton(onTap: _skipCurrentStep),
+                child: _SkipButton(
+                  onTap: _skipCurrentStep,
+                  secondaryText: _currentStep == _ScanStep.passportBack
+                      ? 'Not every passport has a printed back/last page'
+                      : _currentStep == _ScanStep.diplomatVisa
+                      ? 'Diplomatic passport holders are not always required to hold a visa'
+                      : 'Skip if not available',
+                ),
               ),
 
             // ── Bottom controls ─────────────────────────────────────────────
@@ -832,7 +1269,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           Text(
             widget.retakeTarget != null
                 ? 'Retake · ${_currentStep.label}'
-                : 'Step ${_currentStep.stepNumber} of 3 · ${_currentStep.label}',
+                : 'Step ${_currentStep.stepNumber(_selectedVisaDocType)} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 17,
@@ -904,26 +1341,46 @@ class _ScanOverlay extends StatelessWidget {
   final bool isAnalysing;
   final String analysisLabel;
   final double elapsedSeconds;
+  final bool usePortraitForDiplomat;
+  final bool ociPortrait;
 
   const _ScanOverlay({
     required this.step,
     required this.isAnalysing,
     required this.analysisLabel,
     required this.elapsedSeconds,
+    required this.usePortraitForDiplomat,
+    this.ociPortrait = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    // Scan rect: 88% wide, ~38% tall, vertically centred slightly above middle
-    final rectW = size.width * 0.88;
-    final rectH = rectW * 0.66; // landscape card ratio
+
+    // Scan rect dimensions depend on orientation
+    final double rectW;
+    final double rectH;
+
+    if (step == _ScanStep.diplomatVisa && usePortraitForDiplomat) {
+      // Portrait orientation for diplomat visa (2:3 ratio - taller than wide)
+      rectW = size.width * 0.70;
+      rectH = rectW * 1.5;
+    } else if (step == _ScanStep.ociCardFront && ociPortrait) {
+      // Portrait orientation for OCI front when user toggled to portrait
+      rectW = size.width * 0.70;
+      rectH = rectW * 1.5; // 2:3 ratio
+    } else {
+      // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
+      rectW = size.width * 0.88;
+      rectH = rectW * 0.66;
+    }
+
     final rectLeft = (size.width - rectW) / 2;
     final rectTop = size.height * 0.30;
 
     // Choose bracket colour per step
-    final bracketColor = step == _ScanStep.passportBack
-        ? const Color(0xFF4CAF50) // green for back page
+    final bracketColor = step.usesGreenBrackets
+        ? const Color(0xFF4CAF50) // green for back pages and OCI back/stamp
         : AppColors.accent; // golden for front / visa
 
     return Stack(
@@ -1191,7 +1648,12 @@ class _AnalysisCardState extends State<_AnalysisCard>
 
 class _SkipButton extends StatelessWidget {
   final VoidCallback onTap;
-  const _SkipButton({required this.onTap});
+  final String secondaryText;
+
+  const _SkipButton({
+    required this.onTap,
+    this.secondaryText = 'Skip if not available',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1205,9 +1667,9 @@ class _SkipButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            Text(
+            const Text(
               'Skip this step',
               style: TextStyle(
                 color: Colors.white,
@@ -1215,10 +1677,10 @@ class _SkipButton extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
-              'Not every passport has a printed back/last page',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              secondaryText,
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
             ),
           ],
         ),
@@ -1382,6 +1844,228 @@ class _ShutterButton extends StatelessWidget {
 enum _VisaErrorAction { retake, continueWithoutVisa }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Visa Type Selection Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Dialog shown after passport back OCR completes in full flow mode.
+/// Allows the user to choose which type of visa/entry document to capture next.
+class _VisaTypeSelectionDialog extends StatelessWidget {
+  const _VisaTypeSelectionDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title row with close button
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Select Visa / Entry Document',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: const Icon(
+                          Icons.close,
+                          size: 24,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Options list
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    // Option 1: e-Visa / Regular Visa
+                    _VisaTypeOption(
+                      icon: Icons.description,
+                      iconBg: const Color(0xFFE8F4FD),
+                      iconColor: const Color(0xFF2196F3),
+                      title: 'e-Visa / Regular Visa',
+                      description:
+                          'Single front image — sticker, MRZ visa, or printed e-Visa',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.eVisa),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Option 2: OCI Card
+                    _VisaTypeOption(
+                      icon: Icons.badge_outlined,
+                      iconBg: const Color(0xFFE3F2FD),
+                      iconColor: const Color(0xFF1976D2),
+                      title: 'OCI Card',
+                      description:
+                          'Front required, back and stamp page both optional',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.ociCard),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Option 3: Diplomat Passport
+                    _VisaTypeOption(
+                      icon: Icons.military_tech,
+                      iconBg: const Color(0xFFFFF3E0),
+                      iconColor: const Color(0xFFF57C00),
+                      title: 'Diplomat Passport',
+                      description: 'Visa is optional — scan if held, or skip',
+                      onTap: () => Navigator.of(
+                        context,
+                      ).pop(VisaDocumentType.diplomatPassport),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Option 4: No Visa Required
+                    _VisaTypeOption(
+                      icon: Icons.block,
+                      iconBg: const Color(0xFFFFEBEE),
+                      iconColor: const Color(0xFFD32F2F),
+                      title: 'No Visa Required',
+                      description: 'Bhutan & Nepal nationals, where applicable',
+                      onTap: () =>
+                          Navigator.of(context).pop(VisaDocumentType.noVisa),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Individual option card in the visa type selection dialog.
+class _VisaTypeOption extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  const _VisaTypeOption({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon container
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 28, color: iconColor),
+              ),
+              const SizedBox(width: 16),
+
+              // Title and description
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF6B7280),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Custom 2:3 (portrait) aspect ratio preset for ImageCropper
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1395,4 +2079,94 @@ class _PortraitPassportPreset implements CropAspectRatioPresetData {
 
   @override
   String get name => '2:3';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orientation toggle — shown above the scan rect on the OCI front step
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrientationToggle extends StatelessWidget {
+  final bool isPortrait;
+  final ValueChanged<bool> onChanged;
+
+  const _OrientationToggle({required this.isPortrait, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.60),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ToggleOption(
+            icon: Icons.crop_landscape_rounded,
+            label: 'Horizontal',
+            selected: !isPortrait,
+            onTap: () => onChanged(false),
+          ),
+          const SizedBox(width: 4),
+          _ToggleOption(
+            icon: Icons.crop_portrait_rounded,
+            label: 'Vertical',
+            selected: isPortrait,
+            onTap: () => onChanged(true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToggleOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ToggleOption({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : Colors.white60,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : Colors.white60,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -121,7 +121,40 @@ class ApiBaseHelper {
       case 422:
         final body = response.body.trim();
         if (body.isEmpty) return null; // empty body → caller decides meaning
-        return jsonDecode(body);
+        final decoded = jsonDecode(body);
+        // Even on HTTP 200, the API signals business-level failures via
+        // Status: 0 (or Status: 2 for session expiry).
+        // Log these to Firebase so they appear in Analytics alongside
+        // real HTTP errors — callers still receive the parsed JSON as normal.
+        if (decoded is Map<String, dynamic>) {
+          final message =
+              decoded['StatusMessage'] as String? ??
+              decoded['statusMessage'] as String? ??
+              decoded['message'] as String? ??
+              '';
+
+          // Save/login APIs signal failure via Status: 0 or Status: 2
+          final status =
+              decoded['Status'] as int? ?? decoded['status'] as int? ?? -1;
+          if (status == 0 || status == 2) {
+            FirebaseLogger.instance.logError(
+              Exception('API status $status: $message'),
+              null,
+              hint: 'HTTP 200 status=$status | $url | $message',
+            );
+          }
+
+          // OCR APIs (GetGVVisa, intellilabs/*) signal failure via code != 200
+          final code = decoded['code'] as int? ?? decoded['Code'] as int? ?? -1;
+          if (code != -1 && code != 200) {
+            FirebaseLogger.instance.logError(
+              Exception('OCR API code $code: $message'),
+              null,
+              hint: 'HTTP 200 code=$code | $url | $message',
+            );
+          }
+        }
+        return decoded;
       case 400:
         final ex = ServerException('Bad request: ${response.body}');
         FirebaseLogger.instance.logError(

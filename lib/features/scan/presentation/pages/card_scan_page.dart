@@ -1,15 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/navigation/app_navigator.dart';
-import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../data/repositories/card_scan_repository.dart';
+import '../../data/repositories/passport_repository.dart';
+import '../../domain/entities/lookup_models.dart';
 import '../widgets/duplicate_guest_checker.dart';
 import '../widgets/signature_pad.dart';
 import 'domestic_card_scan_page.dart';
@@ -38,6 +39,11 @@ class CardScanPage extends StatefulWidget {
 
 class _CardScanPageState extends State<CardScanPage> {
   final _repo = CardScanRepository();
+  final _passportRepo = PassportRepository();
+
+  // ── Lookup data ───────────────────────────────────────────────────────────
+  List<Purpose> _purposes = [];
+  Purpose? _selectedPurpose;
 
   // ── Images ────────────────────────────────────────────────────────────────
   String _frontImagePath = '';
@@ -57,9 +63,22 @@ class _CardScanPageState extends State<CardScanPage> {
   final _durationCtrl = TextEditingController(text: '1');
   final _checkoutCtrl = TextEditingController();
   final _roomNoCtrl = TextEditingController();
-  final _vehicleNoCtrl = TextEditingController();
-  final _departmentCtrl = TextEditingController();
-  final _contactPersonCtrl = TextEditingController();
+
+  // ── Travel detail controllers ─────────────────────────────────────────────
+  final _arrivalInHotelDateCtrl = TextEditingController();
+  final _arrivalInHotelTimeCtrl = TextEditingController();
+  final _arrivalDateInStateCtrl = TextEditingController();
+  DateTime? _arrivalInHotelDate;
+
+  // ── Other detail controllers ──────────────────────────────────────────────
+  final _companyCtrl = TextEditingController();
+  final _designationCtrl = TextEditingController();
+  final _noOfPersonsCtrl = TextEditingController();
+  final _adultsCtrl = TextEditingController();
+  final _childrenCtrl = TextEditingController();
+  String? _selectedEmployedInIndia;
+  final _durationInIndiaCtrl = TextEditingController();
+  String? _selectedModeOfPayment;
 
   String _selectedSex = 'M';
   DateTime? _dob, _issueDate, _expiryDate;
@@ -78,18 +97,25 @@ class _CardScanPageState extends State<CardScanPage> {
   bool _isVerifying = false;
   bool _isSubmitting = false;
 
-  /// Controls visibility of the Room Number field.
-  /// null = not yet loaded from prefs, true = show, false = hide
-  bool? _showRoomNo;
-
   bool get _isOtherId => widget.cardType == DomesticCardType.otherId;
 
   @override
   void initState() {
     super.initState();
-    _loadRoomNoVisibility();
     _checkoutCtrl.text = _fmt(_checkoutDate);
     _durationCtrl.addListener(_onDurationChanged);
+
+    // Load purposes from repository
+    _passportRepo.getPurposes().then((v) {
+      if (mounted) setState(() => _purposes = v);
+    });
+
+    // Set hotel arrival defaults to today
+    final now = DateTime.now();
+    _arrivalInHotelDate = now;
+    _arrivalInHotelDateCtrl.text = _fmt(now);
+    _arrivalInHotelTimeCtrl.text =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     if (widget.initialFrontImagePath != null) {
       // Pre-filled from DomesticCardScanPage — populate images and OCR data
@@ -136,9 +162,15 @@ class _CardScanPageState extends State<CardScanPage> {
       _durationCtrl,
       _checkoutCtrl,
       _roomNoCtrl,
-      _vehicleNoCtrl,
-      _departmentCtrl,
-      _contactPersonCtrl,
+      _arrivalInHotelDateCtrl,
+      _arrivalInHotelTimeCtrl,
+      _arrivalDateInStateCtrl,
+      _companyCtrl,
+      _designationCtrl,
+      _noOfPersonsCtrl,
+      _adultsCtrl,
+      _childrenCtrl,
+      _durationInIndiaCtrl,
     ]) {
       c.dispose();
     }
@@ -149,15 +181,6 @@ class _CardScanPageState extends State<CardScanPage> {
       '${d.day.toString().padLeft(2, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.year}';
-
-  /// Loads the ShowRoomNo flag from SharedPreferences.
-  Future<void> _loadRoomNoVisibility() async {
-    final session = await SharedPreferencesProvider().getLoginSession();
-    if (!mounted) return;
-    setState(() {
-      _showRoomNo = session?.showRoomNo ?? false;
-    });
-  }
 
   // ── Image capture ─────────────────────────────────────────────────────────
 
@@ -316,7 +339,6 @@ class _CardScanPageState extends State<CardScanPage> {
     }
   }
 
-  // ── OCR Extract ───────────────────────────────────────────────────────────
   // ── OCR Extract ───────────────────────────────────────────────────────────
   /// Maps [DomesticCardType] to the Guest_CardType value expected by the API.
   String _guestCardType() {
@@ -631,6 +653,20 @@ class _CardScanPageState extends State<CardScanPage> {
         'IntendedDurationStayIndividualHouse': _durationCtrl.text,
         'Guest_HotelCheckOutDate': _checkoutDate.toIso8601String(),
         'GuestRoomNo': _roomNoCtrl.text,
+        // New travel fields
+        'Guest_Purpose': _selectedPurpose?.purposeId ?? '',
+        'Guest_ArrivalInHotel': _arrivalInHotelDateCtrl.text,
+        'Guest_ArrivalInHotelTime': _arrivalInHotelTimeCtrl.text,
+        'Guest_ArrivalDateInState': _arrivalDateInStateCtrl.text,
+        // New other detail fields
+        'Guest_Company': _companyCtrl.text,
+        'Guest_Designation': _designationCtrl.text,
+        'Guest_NoOfPersons': _noOfPersonsCtrl.text,
+        'Guest_Adults': _adultsCtrl.text,
+        'Guest_Children': _childrenCtrl.text,
+        'Guest_EmployedInIndia': _selectedEmployedInIndia ?? '',
+        'Guest_DurationInIndia': _durationInIndiaCtrl.text,
+        'Guest_ModeOfPayment': _selectedModeOfPayment ?? '',
       };
 
       final result = await _repo.saveIndianCard(body);
@@ -739,14 +775,13 @@ class _CardScanPageState extends State<CardScanPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildImagesCard(),
-                const SizedBox(height: 16),
-                _buildDetailsCard(),
-                const SizedBox(height: 16),
-                _buildStayCard(),
-
-                const SizedBox(height: 16),
-                _buildSignatureCard(),
+                _buildDocumentDetailsCard(),
+                const SizedBox(height: 20),
+                _buildTravelDetailsCard(),
+                const SizedBox(height: 20),
+                _buildOtherDetailsCard(),
+                const SizedBox(height: 20),
+                _buildIdCardImagesCard(),
               ],
             ),
           ),
@@ -875,267 +910,393 @@ class _CardScanPageState extends State<CardScanPage> {
     );
   }
 
-  Widget _buildImagesCard() {
+  // ── Section card builder ──────────────────────────────────────────────────
+  Widget _buildSectionCard({
+    required IconData icon,
+    required String title,
+    required List<Widget> children,
+  }) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader(Icons.badge_outlined, 'DOCUMENT IMAGES'),
-            const SizedBox(height: 16),
-            Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(left: BorderSide(color: AppColors.accent, width: 3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _ImageTile(
-                    label: 'Front',
-                    imagePath: _frontImagePath,
-                    onTap: _onFrontImageTap,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _ImageTile(
-                    label: 'Profile Photo',
-                    imagePath: _profileImagePath,
-                    onTap: _showProfileImageSheet,
-                    icon: Icons.person_outline,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ImageTile(
-              label: 'Back (optional)',
-              imagePath: _backImagePath,
-              onTap: _showBackImageSheet,
-              fullWidth: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailsCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader(Icons.person_outline, 'DETAILS'),
-            const SizedBox(height: 20),
-            _FormField(label: 'Document Number', controller: _docNoCtrl),
-            _FormField(label: 'First Name', controller: _firstNameCtrl),
-            _FormField(label: 'Last Name', controller: _lastNameCtrl),
-            _FormField(
-              label: 'Address',
-              controller: _addressCtrl,
-              keyboardType: TextInputType.streetAddress,
-            ),
-            _DateField(
-              label: 'Date of Birth',
-              controller: _dobCtrl,
-              onTap: () => _pickDate(
-                initial: _dob,
-                first: DateTime(1910),
-                last: DateTime.now(),
-                helpText: 'Date of Birth',
-                onPicked: (d) => setState(() {
-                  _dob = d;
-                  _dobCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _DropdownField(
-              label: 'Gender',
-              value: _selectedSex,
-              items: const ['M', 'F', 'O'],
-              onChanged: (v) => setState(() => _selectedSex = v!),
-            ),
-            _DateField(
-              label: 'Issuing Date',
-              controller: _issueDateCtrl,
-              onTap: () => _pickDate(
-                initial: _issueDate,
-                first: DateTime(1950),
-                last: DateTime.now(),
-                helpText: 'Issuing Date',
-                onPicked: (d) => setState(() {
-                  _issueDate = d;
-                  _issueDateCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _DateField(
-              label: 'Expiration Date',
-              controller: _expiryDateCtrl,
-              onTap: () => _pickDate(
-                initial: _expiryDate ?? DateTime.now(),
-                first: DateTime.now(),
-                last: DateTime.now().add(const Duration(days: 365 * 15)),
-                helpText: 'Expiry Date',
-                onPicked: (d) => setState(() {
-                  _expiryDate = d;
-                  _expiryDateCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _FormField(
-              label: 'Email',
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            _FormField(
-              label: 'Phone Number',
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStayCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader(Icons.hotel_outlined, 'STAY DETAILS'),
-            const SizedBox(height: 20),
-            _FormField(
-              label: 'Duration of Stay (Days)',
-              controller: _durationCtrl,
-              keyboardType: TextInputType.number,
-            ),
-            if (_showRoomNo == true)
-              _FormField(label: 'Room Number', controller: _roomNoCtrl),
-            _DateField(
-              label: 'Checkout Date',
-              controller: _checkoutCtrl,
-              onTap: () => _pickDate(
-                initial: _checkoutDate,
-                first: DateTime.now(),
-                last: DateTime.now().add(const Duration(days: 365 * 5)),
-                helpText: 'Checkout Date',
-                onPicked: (d) => setState(() {
-                  _checkoutDate = d;
-                  _checkoutCtrl.text = _fmt(d);
-                  _durationCtrl.text = d
-                      .difference(DateTime.now())
-                      .inDays
-                      .toString();
-                }),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignatureCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _sectionHeader(Icons.draw_outlined, 'GUEST SIGNATURE'),
-                if (_signatureBytes != null)
-                  TextButton.icon(
-                    onPressed: () => setState(() => _signatureBytes = null),
-                    icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('Clear'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: _captureSignature,
-              child: Container(
-                height: 100,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _signatureBytes != null
-                        ? AppColors.primary
-                        : Colors.grey[300]!,
-                    width: _signatureBytes != null ? 2 : 1,
-                  ),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: _signatureBytes != null
-                    ? Image.memory(_signatureBytes!, fit: BoxFit.contain)
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.draw_outlined,
-                            color: Colors.grey[400],
-                            size: 32,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tap to add signature',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
                       ),
-              ),
+                      child: Icon(icon, color: AppColors.accent, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      title.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimaryLight,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: AppColors.dividerLight),
+                const SizedBox(height: 16),
+                ...children,
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _sectionHeader(IconData icon, String title) => Row(
-    children: [
-      Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+  // ── Card 1: Document Details ──────────────────────────────────────────────
+  Widget _buildDocumentDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.badge_outlined,
+      title: 'DOCUMENT DETAILS',
+      children: [
+        _FormField(
+          label: 'Document number',
+          controller: _docNoCtrl,
+          required: true,
         ),
-        child: Icon(icon, color: AppColors.primary, size: 20),
-      ),
-      const SizedBox(width: 12),
-      Text(
-        title,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimaryLight,
-          letterSpacing: 0.5,
+        _FormField(
+          label: 'First name',
+          controller: _firstNameCtrl,
+          required: true,
         ),
-      ),
-    ],
-  );
+        _FormField(label: 'Last name', controller: _lastNameCtrl),
+        _DropdownField(
+          label: 'Gender',
+          value: _selectedSex,
+          items: const ['M', 'F', 'O'],
+          onChanged: (v) => setState(() => _selectedSex = v!),
+          required: true,
+        ),
+        _FormField(
+          label: 'Address',
+          controller: _addressCtrl,
+          keyboardType: TextInputType.streetAddress,
+        ),
+        _DateField(
+          label: 'Date of birth',
+          controller: _dobCtrl,
+          required: true,
+          onTap: () => _pickDate(
+            initial: _dob,
+            first: DateTime(1910),
+            last: DateTime.now(),
+            helpText: 'Date of Birth',
+            onPicked: (d) => setState(() {
+              _dob = d;
+              _dobCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        // Issuing Date and Expiry Date only for Driving License
+        if (widget.cardType == DomesticCardType.drivingLicense) ...[
+          _DateField(
+            label: 'Issuing date',
+            controller: _issueDateCtrl,
+            onTap: () => _pickDate(
+              initial: _issueDate,
+              first: DateTime(1950),
+              last: DateTime.now(),
+              helpText: 'Issuing Date',
+              onPicked: (d) => setState(() {
+                _issueDate = d;
+                _issueDateCtrl.text = _fmt(d);
+              }),
+            ),
+          ),
+          _DateField(
+            label: 'Expiration date',
+            controller: _expiryDateCtrl,
+            onTap: () => _pickDate(
+              initial: _expiryDate ?? DateTime.now(),
+              first: DateTime.now(),
+              last: DateTime.now().add(const Duration(days: 365 * 15)),
+              helpText: 'Expiry Date',
+              onPicked: (d) => setState(() {
+                _expiryDate = d;
+                _expiryDateCtrl.text = _fmt(d);
+              }),
+            ),
+          ),
+        ],
+        _FormField(
+          label: 'Email',
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        _FormField(
+          label: 'Phone no',
+          controller: _phoneCtrl,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          required: true,
+        ),
+      ],
+    );
+  }
+
+  // ── Card 2: Travel Details ────────────────────────────────────────────────
+  Widget _buildTravelDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.flight_outlined,
+      title: 'TRAVEL DETAILS',
+      children: [
+        _FormField(
+          label: 'Duration of stay days',
+          controller: _durationCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _DateField(
+          label: 'Checkout date',
+          controller: _checkoutCtrl,
+          onTap: () => _pickDate(
+            initial: _checkoutDate,
+            first: DateTime.now(),
+            last: DateTime.now().add(const Duration(days: 365 * 5)),
+            helpText: 'Checkout Date',
+            onPicked: (d) => setState(() {
+              _checkoutDate = d;
+              _checkoutCtrl.text = _fmt(d);
+              _durationCtrl.text = d
+                  .difference(DateTime.now())
+                  .inDays
+                  .toString();
+            }),
+          ),
+        ),
+        if (_purposes.isNotEmpty)
+          _SearchableDropdown<Purpose>(
+            label: 'Purpose of visit',
+            items: _purposes,
+            selected: _selectedPurpose,
+            itemLabel: (p) => p.purposeName,
+            onChanged: (p) => setState(() => _selectedPurpose = p),
+          ),
+        // Hotel arrival — 70/30 date + time split
+        Row(
+          children: [
+            Expanded(
+              flex: 6,
+              child: _DateField(
+                label: 'Arrival in hotel',
+                controller: _arrivalInHotelDateCtrl,
+                onTap: () => _pickDate(
+                  initial: _arrivalInHotelDate,
+                  first: DateTime(2000),
+                  last: DateTime.now().add(const Duration(days: 365 * 5)),
+                  helpText: 'Arrival in Hotel',
+                  onPicked: (d) => setState(() {
+                    _arrivalInHotelDate = d;
+                    _arrivalInHotelDateCtrl.text = _fmt(d);
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: _TimeField(
+                label: 'Time',
+                controller: _arrivalInHotelTimeCtrl,
+              ),
+            ),
+          ],
+        ),
+        _DateField(
+          label: 'Arrival date in state',
+          controller: _arrivalDateInStateCtrl,
+          onTap: () => _pickDate(
+            initial: null,
+            first: DateTime(2000),
+            last: DateTime.now().add(const Duration(days: 365 * 5)),
+            helpText: 'Arrival Date in State',
+            onPicked: (d) => setState(() {
+              _arrivalDateInStateCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Card 3: Other Details ─────────────────────────────────────────────────
+  Widget _buildOtherDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.info_outline,
+      title: 'OTHER DETAILS',
+      children: [
+        _FormField(label: 'Room no', controller: _roomNoCtrl),
+        _FormField(label: 'Company', controller: _companyCtrl),
+        _FormField(label: 'Designation', controller: _designationCtrl),
+        _FormField(
+          label: 'Number of persons',
+          controller: _noOfPersonsCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _FormField(
+          label: 'Adults',
+          controller: _adultsCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _FormField(
+          label: 'Children',
+          controller: _childrenCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _DropdownField(
+          label: 'Employed in India',
+          value: _selectedEmployedInIndia,
+          items: const ['Yes', 'No'],
+          onChanged: (v) => setState(() => _selectedEmployedInIndia = v),
+        ),
+        _FormField(
+          label: 'Duration of stay in India days',
+          controller: _durationInIndiaCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _DropdownField(
+          label: 'Mode of payment',
+          value: _selectedModeOfPayment,
+          items: const ['Cash', 'Card', 'UPI', 'Online'],
+          onChanged: (v) => setState(() => _selectedModeOfPayment = v),
+        ),
+      ],
+    );
+  }
+
+  // ── Card 4: ID Card Images ────────────────────────────────────────────────
+  Widget _buildIdCardImagesCard() {
+    return _buildSectionCard(
+      icon: Icons.photo_library_outlined,
+      title: 'ID CARD IMAGES',
+      children: [
+        // Row 1: Front + Profile Photo
+        Row(
+          children: [
+            Expanded(
+              child: _ImageTile(
+                label: 'Front',
+                imagePath: _frontImagePath,
+                onTap: _onFrontImageTap,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ImageTile(
+                label: 'Profile Photo',
+                imagePath: _profileImagePath,
+                onTap: _showProfileImageSheet,
+                icon: Icons.person_outline,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Row 2: Back full-width
+        _ImageTile(
+          label: 'Back (optional)',
+          imagePath: _backImagePath,
+          onTap: _showBackImageSheet,
+          fullWidth: true,
+        ),
+        const SizedBox(height: 16),
+        // Signature embedded at bottom
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: const [
+                Icon(
+                  Icons.draw_outlined,
+                  size: 16,
+                  color: AppColors.textPrimaryLight,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Signature',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryLight,
+                  ),
+                ),
+              ],
+            ),
+            if (_signatureBytes != null)
+              TextButton.icon(
+                onPressed: () => setState(() => _signatureBytes = null),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Clear'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _captureSignature,
+          child: Container(
+            height: 100,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.backgroundLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _signatureBytes != null
+                    ? AppColors.primary
+                    : Colors.grey[300]!,
+                width: _signatureBytes != null ? 2 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _signatureBytes != null
+                ? Image.memory(_signatureBytes!, fit: BoxFit.contain)
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.draw_outlined,
+                        color: Colors.grey[400],
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap to add signature',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
@@ -1159,39 +1320,71 @@ class _ImageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = imagePath.isNotEmpty;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: fullWidth ? double.infinity : null,
         height: 110,
-        decoration: BoxDecoration(
-          color: imagePath.isNotEmpty
-              ? Colors.transparent
-              : AppColors.backgroundLight,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: imagePath.isNotEmpty ? AppColors.primary : Colors.grey[300]!,
-            width: imagePath.isNotEmpty ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: imagePath.isNotEmpty
-            ? Image.file(File(imagePath), fit: fit)
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: Colors.grey[400], size: 32),
-                  const SizedBox(height: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w500,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: hasImage
+                  ? Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary, width: 2),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.file(File(imagePath), fit: fit),
+                    )
+                  : CustomPaint(
+                      painter: _DashedBorderPainter(
+                        color: Colors.grey[400]!,
+                        radius: 12,
+                        dashWidth: 6,
+                        dashSpace: 4,
+                        strokeWidth: 1.5,
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundLight,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(icon, color: Colors.grey[400], size: 32),
+                            const SizedBox(height: 6),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
+            ),
+            if (hasImage)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
                   ),
-                ],
+                  child: const Icon(Icons.check, color: Colors.white, size: 12),
+                ),
               ),
+          ],
+        ),
       ),
     );
   }
@@ -1201,33 +1394,54 @@ class _FormField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType keyboardType;
+  final bool required;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _FormField({
     required this.label,
     required this.controller,
     this.keyboardType = TextInputType.text,
+    this.required = false,
+    this.inputFormatters,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 13),
+          label: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+                if (required)
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1244,36 +1458,54 @@ class _DateField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final VoidCallback onTap;
+  final bool required;
 
   const _DateField({
     required this.label,
     required this.controller,
     required this.onTap,
+    this.required = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: GestureDetector(
         onTap: onTap,
         child: AbsorbPointer(
           child: TextField(
             controller: controller,
             decoration: InputDecoration(
-              labelText: label,
-              labelStyle: const TextStyle(fontSize: 13),
+              label: RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    if (required)
+                      const TextSpan(
+                        text: ' *',
+                        style: TextStyle(color: Colors.red, fontSize: 13),
+                      ),
+                  ],
+                ),
+              ),
               suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(
                   color: AppColors.primary,
                   width: 1.5,
@@ -1293,36 +1525,55 @@ class _DateField extends StatelessWidget {
 
 class _DropdownField extends StatelessWidget {
   final String label;
-  final String value;
+  final String? value;
   final List<String> items;
   final ValueChanged<String?> onChanged;
+  final bool required;
 
   const _DropdownField({
     required this.label,
     required this.value,
     required this.items,
     required this.onChanged,
+    this.required = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
         value: value,
+        isExpanded: true,
         decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 13),
+          label: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+                if (required)
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1334,6 +1585,61 @@ class _DropdownField extends StatelessWidget {
             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
             .toList(),
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// ── Searchable Dropdown ───────────────────────────────────────────────────────
+
+class _SearchableDropdown<T> extends StatelessWidget {
+  final String label;
+  final List<T> items;
+  final T? selected;
+  final String Function(T) itemLabel;
+  final void Function(T?) onChanged;
+
+  const _SearchableDropdown({
+    required this.label,
+    required this.items,
+    required this.selected,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<T>(
+        value: selected,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+        items: items
+            .map(
+              (e) => DropdownMenuItem<T>(value: e, child: Text(itemLabel(e))),
+            )
+            .toList(),
+        onChanged: onChanged,
+        isExpanded: true,
       ),
     );
   }
@@ -1401,5 +1707,142 @@ class _ProfileOption extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ── Dashed Border Painter ─────────────────────────────────────────────────────
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+  final double dashWidth;
+  final double dashSpace;
+  final double strokeWidth;
+
+  const _DashedBorderPainter({
+    required this.color,
+    this.radius = 12,
+    this.dashWidth = 6,
+    this.dashSpace = 4,
+    this.strokeWidth = 1.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            strokeWidth / 2,
+            strokeWidth / 2,
+            size.width - strokeWidth,
+            size.height - strokeWidth,
+          ),
+          Radius.circular(radius),
+        ),
+      );
+
+    final metrics = path.computeMetrics();
+    for (final metric in metrics) {
+      double distance = 0;
+      bool draw = true;
+      while (distance < metric.length) {
+        final double len = draw ? dashWidth : dashSpace;
+        if (draw) {
+          canvas.drawPath(metric.extractPath(distance, distance + len), paint);
+        }
+        distance += len;
+        draw = !draw;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.dashSpace != dashSpace ||
+      oldDelegate.strokeWidth != strokeWidth;
+}
+
+// ── Time Field ────────────────────────────────────────────────────────────────
+class _TimeField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _TimeField({required this.label, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GestureDetector(
+        onTap: () => _pickTime(context),
+        child: AbsorbPointer(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: const TextStyle(fontSize: 13),
+              suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    TimeOfDay initial = TimeOfDay.now();
+    final parts = controller.text.split(':');
+    if (parts.length == 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+    }
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null) {
+      controller.text =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    }
   }
 }

@@ -1,13 +1,13 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/navigation/app_navigator.dart';
-import '../../../../core/network/shared_preferences_provider.dart';
+import '../../../../core/services/firebase_logger.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/image_crop_helper.dart';
 import '../../../../core/widgets/image_source_dialog.dart';
@@ -92,11 +92,13 @@ class _PassportFormPageState extends State<PassportFormPage> {
   final _arrivalTimeCtrl = TextEditingController();
   final _hotelArrivalDateCtrl = TextEditingController();
   final _hotelArrivalTimeCtrl = TextEditingController();
-  final _arrivedFromCountryCtrl = TextEditingController();
   final _arrivedFromCityCtrl = TextEditingController();
   final _arrivedFromPlaceCtrl = TextEditingController();
   final _durationOfStayCtrl = TextEditingController();
   final _checkoutDateCtrl = TextEditingController();
+
+  // -- Arrived From Country (now a dropdown, not free text) ------------------
+  MrzCountry? _selectedArrivedFromCountry;
 
   // -- Next Destination fields -----------------------------------------------
   String _nextDestinationType = 'Inside India';
@@ -121,17 +123,27 @@ class _PassportFormPageState extends State<PassportFormPage> {
   String? _visaImageStampPath;
   String? _backImagePath;
 
+  // -- ID Front image (new) --------------------------------------------------
+  String? _idFrontImagePath;
+
+  // -- New FRRO / state arrival fields ---------------------------------------
+  final _frroAppIdCtrl = TextEditingController();
+  final _arrivalDateInStateCtrl = TextEditingController();
+  DateTime? _arrivalDateInState;
+
+  // -- Other Details new fields ----------------------------------------------
+  final _companyCtrl = TextEditingController();
+  final _designationCtrl = TextEditingController();
+  final _noOfPersonsCtrl = TextEditingController();
+  final _adultsCtrl = TextEditingController();
+  final _childrenCtrl = TextEditingController();
+  String? _selectedEmployedInIndia;
+  final _durationInIndiaCtrl = TextEditingController();
+  String? _selectedModeOfPayment;
+
   bool _isSubmitting = false;
   bool _isLoading = true;
   bool _isExtractingVisa = false;
-
-  /// Controls visibility of the Next Destination fields.
-  /// null = not yet loaded from prefs, true = show, false = hide
-  bool? _showNextDestination;
-
-  /// Controls visibility of the Room Number field.
-  /// null = not yet loaded from prefs, true = show, false = hide
-  bool? _showRoomNo;
 
   static const _visaTypes = ['e-Visa', 'OCI', 'Diplomat', 'No Visa'];
 
@@ -146,8 +158,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
     super.initState();
     _prefill();
     _loadLookups();
-    _loadNextDestinationVisibility();
-    _loadRoomNoVisibility();
 
     // Set hotel arrival date and time to today's date and current time
     final now = DateTime.now();
@@ -168,24 +178,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
     // Check for duplicate after prefill (post-frame so context is ready)
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkDuplicate());
-  }
-
-  /// Loads the ShowNextDestination flag from SharedPreferences.
-  Future<void> _loadNextDestinationVisibility() async {
-    final session = await SharedPreferencesProvider().getLoginSession();
-    if (!mounted) return;
-    setState(() {
-      _showNextDestination = session?.showNextDestination ?? false;
-    });
-  }
-
-  /// Loads the ShowRoomNo flag from SharedPreferences.
-  Future<void> _loadRoomNoVisibility() async {
-    final session = await SharedPreferencesProvider().getLoginSession();
-    if (!mounted) return;
-    setState(() {
-      _showRoomNo = session?.showRoomNo ?? false;
-    });
   }
 
   Future<void> _checkDuplicate() async {
@@ -304,7 +296,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _arrivalTimeCtrl,
       _hotelArrivalDateCtrl,
       _hotelArrivalTimeCtrl,
-      _arrivedFromCountryCtrl,
       _arrivedFromCityCtrl,
       _arrivedFromPlaceCtrl,
       _durationOfStayCtrl,
@@ -316,6 +307,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
       _visaIssuingDateCtrl,
       _visaExpiryDateCtrl,
       _visaPOICityCtrl,
+      _frroAppIdCtrl,
+      _arrivalDateInStateCtrl,
+      _companyCtrl,
+      _designationCtrl,
+      _noOfPersonsCtrl,
+      _adultsCtrl,
+      _childrenCtrl,
+      _durationInIndiaCtrl,
     ]) {
       c.dispose();
     }
@@ -385,6 +384,14 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   void _showPortraitSourceSheet() {
     _showImageSourceSheet('Portrait Photo', (src) => _pickPortrait(src));
+  }
+
+  // -- ID Front image picker -------------------------------------------------
+  void _showIdFrontSheet() {
+    _showImageSourceSheet('ID Front', (src) async {
+      final path = await _pickImageToPath(src);
+      if (path != null && mounted) setState(() => _idFrontImagePath = path);
+    });
   }
 
   // -- Visa image pickers ----------------------------------------------------
@@ -506,14 +513,19 @@ class _PassportFormPageState extends State<PassportFormPage> {
         return;
       }
 
-      // Check HTTP code � 200 means success
+      // Check HTTP code — 200 means success
       final code = response['code'] as int? ?? response['Code'] as int?;
       if (code != null && code != 200) {
-        _showSnack(
-          response['message'] as String? ??
-              response['Message'] as String? ??
-              'Could not extract visa details. Please fill in manually.',
+        final msg =
+            response['message'] as String? ??
+            response['Message'] as String? ??
+            'Could not extract visa details. Please fill in manually.';
+        FirebaseLogger.instance.logError(
+          Exception('Visa OCR failed (code=$code): $msg'),
+          null,
+          hint: 'ocr_failure | endpoint=GetGVVisa | code=$code | $msg',
         );
+        _showSnack(msg);
         return;
       }
 
@@ -579,7 +591,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         _arrivalInIndiaCtrl.text = issueDate;
       }
 
-      // Arrived From City and Place � pre-fill from visa's place of issue city
+      // Arrived From City and Place — pre-fill from visa's place of issue city
       if (poiCity.isNotEmpty) {
         _arrivedFromCityCtrl.text = poiCity;
         _arrivedFromPlaceCtrl.text = poiCity;
@@ -642,7 +654,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
         return false;
       }
     }
-    // Removed MRZ Enable Visa validation
 
     // Validate visa issuing date
     final visaIssuingDateError = DateValidator.validateVisaIssuingDate(
@@ -663,20 +674,6 @@ class _PassportFormPageState extends State<PassportFormPage> {
     }
 
     return true;
-  }
-
-  DateTime? _tryParseDate(String text) {
-    try {
-      final parts = text.split('-');
-      if (parts.length == 3) {
-        return DateTime(
-          int.parse(parts[2]),
-          int.parse(parts[1]),
-          int.parse(parts[0]),
-        );
-      }
-    } catch (_) {}
-    return null;
   }
 
   String? _toBase64FromPath(String? path) =>
@@ -718,7 +715,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'Arrival_Time': _arrivalTimeCtrl.text,
         'Arrival_Date': _hotelArrivalDateCtrl.text,
         'Arrival_Time_Hotel': _hotelArrivalTimeCtrl.text,
-        'ArrivedFromCountry': _arrivedFromCountryCtrl.text,
+        'ArrivedFromCountry': _selectedArrivedFromCountry?.code ?? '',
         'ArrivedFromCity': _arrivedFromCityCtrl.text,
         'ArrivedFromPlace': _arrivedFromPlaceCtrl.text,
         'IntendedDurationStayIndividualHouse': _durationOfStayCtrl.text,
@@ -732,12 +729,23 @@ class _PassportFormPageState extends State<PassportFormPage> {
         'NextDestination_OUT_City': _nextDestCityCtrl.text,
         'NextDestination_OUT_Place': _nextDestPlaceOutsideCtrl.text,
         // Images
-        'passportFile': '',
-        'passportBackFile': _toBase64FromPath(_backImagePath) ?? '',
+        'passportFile': _toBase64FromPath(_idFrontImagePath) ?? '',
+        'IdBackFile': _toBase64FromPath(_backImagePath) ?? '',
         'profileImageFile': _portraitBase64 ?? '',
-        'User_Signature': _signatureBytes != null
+        'GuestSignatureFile': _signatureBytes != null
             ? base64Encode(_signatureBytes!)
             : '',
+        // New fields
+        'FRROApplicationID': _frroAppIdCtrl.text,
+        'ArrivalDateInState': _arrivalDateInStateCtrl.text,
+        'Guest_Company': _companyCtrl.text,
+        'Guest_Designation': _designationCtrl.text,
+        'Guest_NoOfPersons': _noOfPersonsCtrl.text,
+        'Guest_Adults': _adultsCtrl.text,
+        'Guest_Children': _childrenCtrl.text,
+        'Guest_EmployedInIndia': _selectedEmployedInIndia ?? '',
+        'Guest_DurationInIndia': _durationInIndiaCtrl.text,
+        'Guest_ModeOfPayment': _selectedModeOfPayment ?? '',
       };
 
       // Add visa fields only if visa section is shown
@@ -773,17 +781,17 @@ class _PassportFormPageState extends State<PassportFormPage> {
         bodyForPrint['passportFile'] =
             '<base64 image: ${bodyForPrint['passportFile'].toString().length} chars>';
       }
-      if (bodyForPrint['passportBackFile']?.toString().isNotEmpty == true) {
-        bodyForPrint['passportBackFile'] =
-            '<base64 image: ${bodyForPrint['passportBackFile'].toString().length} chars>';
+      if (bodyForPrint['IdBackFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['IdBackFile'] =
+            '<base64 image: ${bodyForPrint['IdBackFile'].toString().length} chars>';
       }
       if (bodyForPrint['profileImageFile']?.toString().isNotEmpty == true) {
         bodyForPrint['profileImageFile'] =
             '<base64 image: ${bodyForPrint['profileImageFile'].toString().length} chars>';
       }
-      if (bodyForPrint['User_Signature']?.toString().isNotEmpty == true) {
-        bodyForPrint['User_Signature'] =
-            '<base64 signature: ${bodyForPrint['User_Signature'].toString().length} chars>';
+      if (bodyForPrint['GuestSignatureFile']?.toString().isNotEmpty == true) {
+        bodyForPrint['GuestSignatureFile'] =
+            '<base64 signature: ${bodyForPrint['GuestSignatureFile'].toString().length} chars>';
       }
       if (bodyForPrint['visaFile']?.toString().isNotEmpty == true) {
         bodyForPrint['visaFile'] =
@@ -855,17 +863,15 @@ class _PassportFormPageState extends State<PassportFormPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildPortraitCard(),
-                      const SizedBox(height: 16),
-                      _buildPassportCard(),
-                      const SizedBox(height: 16),
-                      _buildTravelCard(),
-                      const SizedBox(height: 16),
-                      if (widget.showVisaSection) ...[
-                        _buildVisaCard(),
-                        const SizedBox(height: 16),
-                      ],
-                      _buildSignatureCard(),
+                      _buildPassportDetailsCard(),
+                      const SizedBox(height: 20),
+                      if (widget.showVisaSection) _buildVisaDetailsCard(),
+                      if (widget.showVisaSection) const SizedBox(height: 20),
+                      _buildTravelDetailsCard(),
+                      const SizedBox(height: 20),
+                      _buildOtherDetailsCard(),
+                      const SizedBox(height: 20),
+                      _buildIdCardImagesCard(),
                     ],
                   ),
                 ),
@@ -956,83 +962,53 @@ class _PassportFormPageState extends State<PassportFormPage> {
     );
   }
 
-  Widget _buildPortraitCard() {
-    Uint8List? bytes;
-    if (_portraitBase64 != null && _portraitBase64!.isNotEmpty) {
-      try {
-        bytes = base64Decode(_portraitBase64!);
-      } catch (_) {}
-    }
+  // -- Section card builder (FEAT-001 widget) ---------------------------------
+  Widget _buildSectionCard({
+    required IconData icon,
+    required String title,
+    required List<Widget> children,
+  }) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: GestureDetector(
-            onTap: _showPortraitSourceSheet,
-            child: Stack(
-              alignment: Alignment.center,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(left: BorderSide(color: AppColors.accent, width: 3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 140,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: AppColors.backgroundLight,
-                    border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      width: 2,
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: AppColors.accent, size: 18),
                     ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: bytes != null
-                      ? Image.memory(bytes, fit: BoxFit.cover)
-                      : Icon(
-                          Icons.person_outline,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
+                    const SizedBox(width: 12),
+                    Text(
+                      title.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimaryLight,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  bottom: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          bytes != null ? 'Change' : 'Add Photo',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: AppColors.dividerLight),
+                const SizedBox(height: 16),
+                ...children,
               ],
             ),
           ),
@@ -1041,491 +1017,619 @@ class _PassportFormPageState extends State<PassportFormPage> {
     );
   }
 
-  Widget _buildPassportCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _SectionHeader(
-              icon: Icons.badge_outlined,
-              title: 'PASSPORT DETAILS',
-            ),
-            const SizedBox(height: 20),
-            _FormField(label: 'Surname', controller: _surnameCtrl),
-            _FormField(label: 'Given Names', controller: _givenNamesCtrl),
-            _FormField(label: 'Document Number', controller: _docNoCtrl),
-            _CountryDropdown(
-              label: 'Issuing Country',
-              countries: _countries,
-              selected: _selectedIssuingCountry,
-              onChanged: (c) => setState(() => _selectedIssuingCountry = c),
-            ),
-            _CountryDropdown(
-              label: 'Nationality',
-              countries: _countries,
-              selected: _selectedNationality,
-              onChanged: (c) => setState(() => _selectedNationality = c),
-            ),
-            _DateField(
-              label: 'Date of Birth',
-              controller: _dobCtrl,
-              onTap: () => _pickDate(
-                initial: _dob,
-                first: DateTime(1910),
-                last: DateTime.now(),
-                helpText: 'Date of Birth',
-                onPicked: (d) => setState(() {
-                  _dob = d;
-                  _dobCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _DropdownField(
-              label: 'Sex',
-              value: _sex,
-              items: const ['M', 'F', 'O'],
-              onChanged: (v) => setState(() => _sex = v!),
-            ),
-            _DateField(
-              label: 'Estimated Issuing Date',
-              controller: _issuingDateCtrl,
-              onTap: () => _pickDate(
-                initial: _issuingDate,
-                first: DateTime(1950),
-                last: DateTime.now(),
-                helpText: 'Issuing Date',
-                onPicked: (d) => setState(() {
-                  _issuingDate = d;
-                  _issuingDateCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _DateField(
-              label: 'Expiration Date',
-              controller: _expiryDateCtrl,
-              onTap: () => _pickDate(
-                initial: _expiryDate ?? DateTime.now(),
-                first: DateTime(1950),
-                last: DateTime.now().add(const Duration(days: 365 * 20)),
-                helpText: 'Expiry Date',
-                onPicked: (d) => setState(() {
-                  _expiryDate = d;
-                  _expiryDateCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            if (_purposes.isNotEmpty)
-              _SearchableDropdown<Purpose>(
-                label: 'Purpose of Visit',
-                items: _purposes,
-                selected: _selectedPurpose,
-                itemLabel: (p) => p.purposeName,
-                onChanged: (p) => setState(() => _selectedPurpose = p),
-              ),
-            _FormField(
-              label: 'Contact Number',
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-            ),
-            _FormField(
-              label: 'Email',
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            _FormField(
-              label: 'Address',
-              controller: _addressCtrl,
-              keyboardType: TextInputType.streetAddress,
-            ),
-            _FormField(
-              label: 'Place of Issue (City)',
-              controller: _placeOfIssueCtrl,
-            ),
-          ],
+  // ── Card 1: ID / Passport Details ─────────────────────────────────────────
+  Widget _buildPassportDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.badge_outlined,
+      title: 'ID / PASSPORT DETAILS',
+      children: [
+        _FormField(
+          label: 'First name',
+          controller: _givenNamesCtrl,
+          required: true,
         ),
-      ),
+        _FormField(
+          label: 'Last name',
+          controller: _surnameCtrl,
+          required: true,
+        ),
+        _DropdownField(
+          label: 'Gender',
+          value: _sex,
+          items: const ['M', 'F', 'O'],
+          onChanged: (v) => setState(() => _sex = v!),
+          required: true,
+        ),
+        _DateField(
+          label: 'Date of birth',
+          controller: _dobCtrl,
+          required: true,
+          onTap: () => _pickDate(
+            initial: _dob,
+            first: DateTime(1910),
+            last: DateTime.now(),
+            helpText: 'Date of Birth',
+            onPicked: (d) => setState(() {
+              _dob = d;
+              _dobCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        _FormField(label: 'Address', controller: _addressCtrl, maxLines: 3),
+        _FormField(
+          label: 'Document no',
+          controller: _docNoCtrl,
+          required: true,
+        ),
+        _DateField(
+          label: 'Date of issue',
+          controller: _issuingDateCtrl,
+          onTap: () => _pickDate(
+            initial: _issuingDate,
+            first: DateTime(1950),
+            last: DateTime.now(),
+            helpText: 'Issuing Date',
+            onPicked: (d) => setState(() {
+              _issuingDate = d;
+              _issuingDateCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        _DateField(
+          label: 'Expiry date',
+          controller: _expiryDateCtrl,
+          onTap: () => _pickDate(
+            initial: _expiryDate ?? DateTime.now(),
+            first: DateTime(1950),
+            last: DateTime.now().add(const Duration(days: 365 * 20)),
+            helpText: 'Expiry Date',
+            onPicked: (d) => setState(() {
+              _expiryDate = d;
+              _expiryDateCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        _CountryDropdown(
+          label: 'Nationality',
+          countries: _countries,
+          selected: _selectedNationality,
+          onChanged: (c) => setState(() => _selectedNationality = c),
+        ),
+        _CountryDropdown(
+          label: 'Place of issue',
+          countries: _countries,
+          selected: _selectedIssuingCountry,
+          onChanged: (c) => setState(() => _selectedIssuingCountry = c),
+        ),
+        _FormField(label: 'Place of issue city', controller: _placeOfIssueCtrl),
+      ],
     );
   }
 
-  Widget _buildTravelCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _SectionHeader(
-              icon: Icons.flight_outlined,
-              title: 'TRAVEL & ARRIVAL',
-            ),
-            const SizedBox(height: 20),
-            _DateField(
-              label: 'Date of Arrival in India',
-              controller: _arrivalInIndiaCtrl,
-              onTap: () => _pickDate(
-                initial: _arrivalInIndia,
-                first: DateTime(2000),
-                last: DateTime.now().add(const Duration(days: 365 * 5)),
-                helpText: 'Date of Arrival in India',
-                onPicked: (d) => setState(() {
-                  _arrivalInIndia = d;
-                  _arrivalInIndiaCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            _FormField(
-              label: 'Arrival Time (India)',
-              controller: _arrivalTimeCtrl,
-              keyboardType: TextInputType.datetime,
-            ),
-            _DateField(
-              label: 'Hotel Check-in Date',
-              controller: _hotelArrivalDateCtrl,
-              onTap: () => _pickDate(
-                initial: _hotelArrivalDate,
-                first: DateTime(2000),
-                last: DateTime.now().add(const Duration(days: 365 * 5)),
-                helpText: 'Hotel Check-in Date',
-                onPicked: (d) => setState(() {
-                  _hotelArrivalDate = d;
-                  _hotelArrivalDateCtrl.text = _fmt(d);
-                  // Recalculate checkout date when check-in date changes
-                  _updateCheckoutDate();
-                }),
-              ),
-            ),
-            _FormField(
-              label: 'Hotel Check-in Time',
-              controller: _hotelArrivalTimeCtrl,
-              keyboardType: TextInputType.datetime,
-            ),
-            _FormField(
-              label: 'Arrived From Country',
-              controller: _arrivedFromCountryCtrl,
-            ),
-            _FormField(
-              label: 'Arrived From City',
-              controller: _arrivedFromCityCtrl,
-            ),
-            _FormField(
-              label: 'Arrived From Place',
-              controller: _arrivedFromPlaceCtrl,
-            ),
-            _FormField(
-              label: 'Duration of Stay (days)',
-              controller: _durationOfStayCtrl,
-              keyboardType: TextInputType.number,
-            ),
-            if (_showRoomNo == true)
-              _FormField(label: 'Room Number', controller: _roomNoCtrl),
-            _DateField(
-              label: 'Checkout Date',
-              controller: _checkoutDateCtrl,
-              onTap: () => _pickDate(
-                initial: _checkoutDate ?? DateTime.now(),
-                first: DateTime.now(),
-                last: DateTime.now().add(const Duration(days: 365 * 5)),
-                helpText: 'Checkout Date',
-                onPicked: (d) => setState(() {
-                  _checkoutDate = d;
-                  _checkoutDateCtrl.text = _fmt(d);
-                }),
-              ),
-            ),
-            // Next Destination Type Dropdown - only shown if ShowNextDestination is enabled in settings
-            if (_showNextDestination == true) ...[
-              _DropdownField(
-                label: 'Next Destination',
-                value: _nextDestinationType,
-                items: const ['Inside India', 'Outside India'],
-                onChanged: (v) => setState(() => _nextDestinationType = v!),
-              ),
-              // Conditional fields for Inside India
-              if (_nextDestinationType == 'Inside India') ...[
-                _StateDropdown(
-                  label: 'State',
-                  states: _states,
-                  selected: _nextDestState,
-                  onChanged: (state) {
-                    setState(() => _nextDestState = state);
-                    if (state != null) {
-                      _loadDistrictsForState(state.stateId);
-                    }
-                  },
-                ),
-                _DistrictDropdown(
-                  label: 'District',
-                  districts: _nextDestState != null
-                      ? (_districtsByState[_nextDestState!.stateId] ?? [])
-                      : [],
-                  selected: _nextDestDistrict,
-                  onChanged: (district) =>
-                      setState(() => _nextDestDistrict = district),
-                  enabled: _nextDestState != null,
-                ),
-                _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
-              ],
-              // Conditional fields for Outside India
-              if (_nextDestinationType == 'Outside India') ...[
-                _CountryDropdown(
-                  label: 'Country',
-                  countries: _countries,
-                  selected: _nextDestCountry,
-                  onChanged: (c) => setState(() => _nextDestCountry = c),
-                ),
-                _FormField(label: 'City', controller: _nextDestCityCtrl),
-                _FormField(
-                  label: 'Place',
-                  controller: _nextDestPlaceOutsideCtrl,
-                ),
-              ],
-            ], // end of _showNextDestination conditional
-          ],
+  // ── Card 2: VISA / OCI Details ────────────────────────────────────────────
+  Widget _buildVisaDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.card_travel_outlined,
+      title: 'VISA / OCI DETAILS',
+      children: [
+        _DropdownField(
+          label: 'Visa ID type',
+          value: _visaType.isEmpty ? null : _visaType,
+          items: _visaTypes,
+          onChanged: (v) {
+            if (v != null) _onVisaTypeChanged(v);
+          },
         ),
-      ),
+        if (_showVisaFields) ...[
+          _FormField(label: 'Visa number', controller: _visaDocNoCtrl),
+          _DateField(
+            label: 'Date of issue',
+            controller: _visaIssuingDateCtrl,
+            onTap: () => _pickDate(
+              initial: _visaIssuingDate,
+              first: DateTime(1950),
+              last: DateTime.now(),
+              helpText: 'Visa Issuing Date',
+              onPicked: (d) => setState(() {
+                _visaIssuingDate = d;
+                _visaIssuingDateCtrl.text = _fmt(d);
+              }),
+            ),
+          ),
+          _DateField(
+            label: 'Expiry date',
+            controller: _visaExpiryDateCtrl,
+            onTap: () => _pickDate(
+              initial: _visaExpiryDate ?? DateTime.now(),
+              first: DateTime(1950),
+              last: DateTime.now().add(const Duration(days: 365 * 20)),
+              helpText: 'Visa Expiry Date',
+              onPicked: (d) => setState(() {
+                _visaExpiryDate = d;
+                _visaExpiryDateCtrl.text = _fmt(d);
+              }),
+            ),
+          ),
+          _CountryDropdown(
+            label: 'Place of issue',
+            countries: _countries,
+            selected: _selectedVisaCountry,
+            onChanged: (c) => setState(() => _selectedVisaCountry = c),
+          ),
+          _FormField(
+            label: 'Place of issue city',
+            controller: _visaPOICityCtrl,
+          ),
+          if (_visaDropTypes.isNotEmpty)
+            _SearchableDropdown<VisaType>(
+              label: 'Visa type',
+              items: _visaDropTypes,
+              selected: _selectedDropVisaType,
+              itemLabel: (v) => v.visaTypeName,
+              onChanged: (v) => setState(() => _selectedDropVisaType = v),
+            ),
+          if (_visaType == 'e-Visa' && _visaSubTypes.isNotEmpty)
+            _SearchableDropdown<VisaSubType>(
+              label: 'Visa sub type',
+              items: _visaSubTypes,
+              selected: _selectedVisaSubType,
+              itemLabel: (v) => v.visaSubTypeShort,
+              onChanged: (v) => setState(() => _selectedVisaSubType = v),
+            ),
+          _FormField(
+            label: 'FRRO application ID no',
+            controller: _frroAppIdCtrl,
+          ),
+        ],
+      ],
     );
   }
 
-  Widget _buildVisaCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+  // ── Card 3: Travel Details ────────────────────────────────────────────────
+  Widget _buildTravelDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.flight_outlined,
+      title: 'TRAVEL DETAILS',
+      children: [
+        // Arrival in India — 70/30 date + time split
+        Row(
+          children: [
+            Expanded(
+              flex: 6,
+              child: _DateField(
+                label: 'Arrival in India',
+                controller: _arrivalInIndiaCtrl,
+                onTap: () => _pickDate(
+                  initial: _arrivalInIndia,
+                  first: DateTime(2000),
+                  last: DateTime.now().add(const Duration(days: 365 * 5)),
+                  helpText: 'Date of Arrival in India',
+                  onPicked: (d) => setState(() {
+                    _arrivalInIndia = d;
+                    _arrivalInIndiaCtrl.text = _fmt(d);
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: _TimeField(label: 'Time', controller: _arrivalTimeCtrl),
+            ),
+          ],
+        ),
+        _CountryDropdown(
+          label: 'Arrived from country',
+          countries: _countries,
+          selected: _selectedArrivedFromCountry,
+          onChanged: (c) => setState(() => _selectedArrivedFromCountry = c),
+        ),
+        _CitySearchField(
+          label: 'Arrived from city',
+          controller: _arrivedFromCityCtrl,
+        ),
+        _FormField(
+          label: 'Arrived from place',
+          controller: _arrivedFromPlaceCtrl,
+        ),
+        _FormField(
+          label: 'Duration of stay days',
+          controller: _durationOfStayCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        // Hotel arrival — 70/30 date + time split
+        Row(
+          children: [
+            Expanded(
+              flex: 6,
+              child: _DateField(
+                label: 'Arrival in hotel',
+                controller: _hotelArrivalDateCtrl,
+                onTap: () => _pickDate(
+                  initial: _hotelArrivalDate,
+                  first: DateTime(2000),
+                  last: DateTime.now().add(const Duration(days: 365 * 5)),
+                  helpText: 'Hotel Check-in Date',
+                  onPicked: (d) => setState(() {
+                    _hotelArrivalDate = d;
+                    _hotelArrivalDateCtrl.text = _fmt(d);
+                    _updateCheckoutDate();
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: _TimeField(
+                label: 'Time',
+                controller: _hotelArrivalTimeCtrl,
+              ),
+            ),
+          ],
+        ),
+        _DateField(
+          label: 'Hotel departure',
+          controller: _checkoutDateCtrl,
+          onTap: () => _pickDate(
+            initial: _checkoutDate ?? DateTime.now(),
+            first: DateTime.now(),
+            last: DateTime.now().add(const Duration(days: 365 * 5)),
+            helpText: 'Checkout Date',
+            onPicked: (d) => setState(() {
+              _checkoutDate = d;
+              _checkoutDateCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        _DateField(
+          label: 'Arrival date in state',
+          controller: _arrivalDateInStateCtrl,
+          onTap: () => _pickDate(
+            initial: _arrivalDateInState,
+            first: DateTime(2000),
+            last: DateTime.now().add(const Duration(days: 365 * 5)),
+            helpText: 'Arrival Date in State',
+            onPicked: (d) => setState(() {
+              _arrivalDateInState = d;
+              _arrivalDateInStateCtrl.text = _fmt(d);
+            }),
+          ),
+        ),
+        // Next Destination — always shown (no gate)
+        _DropdownField(
+          label: 'Next destination',
+          value: _nextDestinationType,
+          items: const ['Inside India', 'Outside India'],
+          onChanged: (v) => setState(() => _nextDestinationType = v!),
+        ),
+        if (_nextDestinationType == 'Inside India') ...[
+          _StateDropdown(
+            label: 'State',
+            states: _states,
+            selected: _nextDestState,
+            onChanged: (state) {
+              setState(() => _nextDestState = state);
+              if (state != null) _loadDistrictsForState(state.stateId);
+            },
+          ),
+          _DistrictDropdown(
+            label: 'District',
+            districts: _nextDestState != null
+                ? (_districtsByState[_nextDestState!.stateId] ?? [])
+                : [],
+            selected: _nextDestDistrict,
+            onChanged: (district) =>
+                setState(() => _nextDestDistrict = district),
+            enabled: _nextDestState != null,
+          ),
+          _FormField(label: 'Place', controller: _nextDestPlaceIndiaCtrl),
+        ],
+        if (_nextDestinationType == 'Outside India') ...[
+          _CountryDropdown(
+            label: 'Country',
+            countries: _countries,
+            selected: _nextDestCountry,
+            onChanged: (c) => setState(() => _nextDestCountry = c),
+          ),
+          _FormField(label: 'City', controller: _nextDestCityCtrl),
+          _FormField(label: 'Place', controller: _nextDestPlaceOutsideCtrl),
+        ],
+      ],
+    );
+  }
+
+  // ── Card 4: Other Details ─────────────────────────────────────────────────
+  Widget _buildOtherDetailsCard() {
+    return _buildSectionCard(
+      icon: Icons.info_outline,
+      title: 'OTHER DETAILS',
+      children: [
+        // Room No always shown
+        _FormField(label: 'Room no', controller: _roomNoCtrl),
+        _FormField(label: 'Company', controller: _companyCtrl),
+        _FormField(label: 'Designation', controller: _designationCtrl),
+        _FormField(
+          label: 'Number of persons',
+          controller: _noOfPersonsCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _FormField(
+          label: 'Adults',
+          controller: _adultsCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _FormField(
+          label: 'Children',
+          controller: _childrenCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _DropdownField(
+          label: 'Employed in India',
+          value: _selectedEmployedInIndia,
+          items: const ['Yes', 'No'],
+          onChanged: (v) => setState(() => _selectedEmployedInIndia = v),
+        ),
+        _FormField(
+          label: 'Duration of stay in India days',
+          controller: _durationInIndiaCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _DropdownField(
+          label: 'Mode of payment',
+          value: _selectedModeOfPayment,
+          items: const ['Cash', 'Card', 'UPI', 'Online'],
+          onChanged: (v) => setState(() => _selectedModeOfPayment = v),
+        ),
+        _FormField(
+          label: 'Email',
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          required: true,
+        ),
+        _FormField(
+          label: 'Phone no',
+          controller: _phoneCtrl,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          required: true,
+        ),
+      ],
+    );
+  }
+
+  // ── Card 5: ID Card Images ────────────────────────────────────────────────
+  Widget _buildIdCardImagesCard() {
+    Uint8List? portraitBytes;
+    if (_portraitBase64 != null && _portraitBase64!.isNotEmpty) {
+      try {
+        portraitBytes = base64Decode(_portraitBase64!);
+      } catch (_) {}
+    }
+
+    return _buildSectionCard(
+      icon: Icons.photo_library_outlined,
+      title: 'ID CARD IMAGES',
+      children: [
+        // Row 1: Portrait + ID Front
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _SectionHeader(
-              icon: Icons.card_travel_outlined,
-              title: 'VISA INFORMATION',
+            Expanded(
+              child: GestureDetector(
+                onTap: _showPortraitSourceSheet,
+                child: SizedBox(
+                  height: 110,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: portraitBytes != null
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.primary,
+                                    width: 2,
+                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Image.memory(
+                                  portraitBytes,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : CustomPaint(
+                                painter: _DashedBorderPainter(
+                                  color: Colors.grey[400]!,
+                                  radius: 12,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: AppColors.backgroundLight,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.person_outline,
+                                        color: Colors.grey[400],
+                                        size: 32,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Portrait',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[500],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                      ),
+                      if (portraitBytes != null)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-            _DropdownField(
-              label: 'Type of Visa',
-              value: _visaType.isEmpty ? null : _visaType,
-              items: _visaTypes,
-              onChanged: (v) {
-                if (v != null) _onVisaTypeChanged(v);
-              },
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ImageTile(
+                label: 'ID Front Side',
+                imagePath: _idFrontImagePath,
+                onTap: _showIdFrontSheet,
+                onRemove: () => setState(() => _idFrontImagePath = null),
+              ),
             ),
-            if (_isOCI) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _VisaImageSlot(
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Row 2: ID Back + conditional OCI Front / Visa
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _ImageTile(
+                label: 'ID Back Side',
+                imagePath: _backImagePath,
+                onTap: () => _showImageSourceSheet('ID Back', (src) async {
+                  final path = await _pickImageToPath(src);
+                  if (path != null && mounted) {
+                    setState(() => _backImagePath = path);
+                  }
+                }),
+                onRemove: () => setState(() => _backImagePath = null),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _isOCI
+                  ? _ImageTile(
                       label: 'OCI Front',
                       imagePath: _visaImagePath,
                       onTap: _showVisaFrontSheet,
                       onRemove: () => setState(() => _visaImagePath = null),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _VisaImageSlot(
-                      label: 'OCI Back',
-                      imagePath: _visaImageBackPath,
-                      onTap: _showVisaBackSheet,
-                      onRemove: () => setState(() => _visaImageBackPath = null),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _VisaImageSlot(
-                      label: 'OCI Stamp',
-                      imagePath: _visaImageStampPath,
-                      onTap: _showVisaStampSheet,
-                      onRemove: () =>
-                          setState(() => _visaImageStampPath = null),
-                    ),
-                  ),
-                  const Expanded(child: SizedBox()),
-                ],
-              ),
-            ],
-            if (_isEVisaOrDiplomat) ...[
-              const SizedBox(height: 16),
-              _VisaImageSlot(
-                label: 'Capture Visa',
-                imagePath: _visaImagePath,
-                onTap: _showVisaFrontSheet,
-                onRemove: () => setState(() => _visaImagePath = null),
-              ),
-            ],
-            if (_showVisaFields) ...[
-              const SizedBox(height: 16),
-              _FormField(label: 'Document Number', controller: _visaDocNoCtrl),
-              _CountryDropdown(
-                label: 'Issuing Country',
-                countries: _countries,
-                selected: _selectedVisaCountry,
-                onChanged: (c) => setState(() => _selectedVisaCountry = c),
-              ),
-              if (_visaDropTypes.isNotEmpty)
-                _SearchableDropdown<VisaType>(
-                  label: 'Visa Type',
-                  items: _visaDropTypes,
-                  selected: _selectedDropVisaType,
-                  itemLabel: (v) => v.visaTypeName,
-                  onChanged: (v) => setState(() => _selectedDropVisaType = v),
-                ),
-              // Visa Sub Type dropdown for e-Visa
-              if (_visaType == 'e-Visa' && _visaSubTypes.isNotEmpty)
-                _SearchableDropdown<VisaSubType>(
-                  label: 'Visa Sub Type',
-                  items: _visaSubTypes,
-                  selected: _selectedVisaSubType,
-                  itemLabel: (v) => v.visaSubTypeShort,
-                  onChanged: (v) => setState(() => _selectedVisaSubType = v),
-                ),
-              _DateField(
-                label: 'Issuing Date',
-                controller: _visaIssuingDateCtrl,
-                onTap: () => _pickDate(
-                  initial: _visaIssuingDate,
-                  first: DateTime(1950),
-                  last: DateTime.now(),
-                  helpText: 'Visa Issuing Date',
-                  onPicked: (d) => setState(() {
-                    _visaIssuingDate = d;
-                    _visaIssuingDateCtrl.text = _fmt(d);
-                  }),
-                ),
-              ),
-              _DateField(
-                label: 'Expiration Date',
-                controller: _visaExpiryDateCtrl,
-                onTap: () => _pickDate(
-                  initial: _visaExpiryDate ?? DateTime.now(),
-                  first: DateTime(1950),
-                  last: DateTime.now().add(const Duration(days: 365 * 20)),
-                  helpText: 'Visa Expiry Date',
-                  onPicked: (d) => setState(() {
-                    _visaExpiryDate = d;
-                    _visaExpiryDateCtrl.text = _fmt(d);
-                  }),
-                ),
-              ),
-              _FormField(
-                label: 'Place of Issue (City)',
-                controller: _visaPOICityCtrl,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignatureCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const _SectionHeader(
-                  icon: Icons.draw_outlined,
-                  title: 'GUEST SIGNATURE',
-                ),
-                if (_signatureBytes != null)
-                  TextButton.icon(
-                    onPressed: () => setState(() => _signatureBytes = null),
-                    icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('Clear'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: _captureSignature,
-              child: Container(
-                height: 100,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundLight,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _signatureBytes != null
-                        ? AppColors.primary
-                        : Colors.grey[300]!,
-                    width: _signatureBytes != null ? 2 : 1,
-                  ),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: _signatureBytes != null
-                    ? Image.memory(_signatureBytes!, fit: BoxFit.contain)
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.draw_outlined,
-                            color: Colors.grey[400],
-                            size: 32,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tap to add signature',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
+                    )
+                  : _isEVisaOrDiplomat
+                  ? _ImageTile(
+                      label: 'Visa Image',
+                      imagePath: _visaImagePath,
+                      onTap: _showVisaFrontSheet,
+                      onRemove: () => setState(() => _visaImagePath = null),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// -- Section Header ------------------------------------------------------------
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  const _SectionHeader({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
+        // OCI extra rows
+        if (_isOCI) ...[
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _ImageTile(
+                  label: 'OCI Back',
+                  imagePath: _visaImageBackPath,
+                  onTap: _showVisaBackSheet,
+                  onRemove: () => setState(() => _visaImageBackPath = null),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ImageTile(
+                  label: 'OCI Stamp',
+                  imagePath: _visaImageStampPath,
+                  onTap: _showVisaStampSheet,
+                  onRemove: () => setState(() => _visaImageStampPath = null),
+                ),
+              ),
+            ],
           ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
+        ],
+        const SizedBox(height: 16),
+        // Signature — full width
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Signature',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimaryLight,
+              ),
+            ),
+            if (_signatureBytes != null)
+              TextButton.icon(
+                onPressed: () => setState(() => _signatureBytes = null),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Clear'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimaryLight,
-            letterSpacing: 0.5,
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _captureSignature,
+          child: Container(
+            height: 100,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.backgroundLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _signatureBytes != null
+                    ? AppColors.primary
+                    : Colors.grey[300]!,
+                width: _signatureBytes != null ? 2 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _signatureBytes != null
+                ? Image.memory(_signatureBytes!, fit: BoxFit.contain)
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.draw_outlined,
+                        color: Colors.grey[400],
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap to add signature',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ],
@@ -1538,33 +1642,57 @@ class _FormField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType keyboardType;
+  final bool required;
+  final int maxLines;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _FormField({
     required this.label,
     required this.controller,
     this.keyboardType = TextInputType.text,
+    this.required = false,
+    this.maxLines = 1,
+    this.inputFormatters,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        maxLines: maxLines,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 13),
+          label: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+                if (required)
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1582,36 +1710,54 @@ class _DateField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final VoidCallback onTap;
+  final bool required;
 
   const _DateField({
     required this.label,
     required this.controller,
     required this.onTap,
+    this.required = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: GestureDetector(
         onTap: onTap,
         child: AbsorbPointer(
           child: TextField(
             controller: controller,
             decoration: InputDecoration(
-              labelText: label,
-              labelStyle: const TextStyle(fontSize: 13),
+              label: RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    if (required)
+                      const TextSpan(
+                        text: ' *',
+                        style: TextStyle(color: Colors.red, fontSize: 13),
+                      ),
+                  ],
+                ),
+              ),
               suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(
                   color: AppColors.primary,
                   width: 1.5,
@@ -1635,33 +1781,51 @@ class _DropdownField extends StatelessWidget {
   final String? value;
   final List<String> items;
   final void Function(String?) onChanged;
+  final bool required;
 
   const _DropdownField({
     required this.label,
     required this.value,
     required this.items,
     required this.onChanged,
+    this.required = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
         value: value,
         decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 13),
+          label: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+                if (required)
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1697,25 +1861,25 @@ class _CountryDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     if (countries.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: InkWell(
         onTap: () => _showSearch(context),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: InputDecorator(
           decoration: InputDecoration(
             labelText: label,
             labelStyle: const TextStyle(fontSize: 13),
             suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
                 color: AppColors.primary,
                 width: 1.5,
@@ -1807,57 +1971,209 @@ class _CountrySearchSheetState extends State<_CountrySearchSheet> {
       expand: false,
       initialChildSize: 0.75,
       maxChildSize: 0.95,
-      builder: (_, scrollCtrl) => Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 10),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'Search ${widget.label}',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: scrollCtrl,
-              itemCount: _filtered.length,
-              itemBuilder: (_, i) {
-                final c = _filtered[i];
-                final isSelected = widget.selected?.code == c.code;
-                return ListTile(
-                  title: Text(c.name),
-                  subtitle: Text(c.code, style: const TextStyle(fontSize: 12)),
-                  selected: isSelected,
-                  selectedColor: AppColors.primary,
-                  selectedTileColor: AppColors.primary.withValues(alpha: 0.1),
-                  onTap: () => widget.onSelected(c),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: AppColors.primary)
-                      : null,
-                );
-              },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.public_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimaryLight,
+                          ),
+                        ),
+                        Text(
+                          '${_filtered.length} countries',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 16),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search country or code…',
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey[400],
+                    size: 20,
+                  ),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: () => _searchCtrl.clear(),
+                          color: Colors.grey[400],
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFFF5F7FA),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 48,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No countries found',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: _filtered.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, indent: 64),
+                      itemBuilder: (_, i) {
+                        final c = _filtered[i];
+                        final isSelected = widget.selected?.code == c.code;
+                        final initials = c.name.isNotEmpty
+                            ? c.name[0].toUpperCase()
+                            : '?';
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 2,
+                          ),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.12)
+                                  : const Color(0xFFF0F2F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            c.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                          subtitle: Text(
+                            c.code,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                )
+                              : null,
+                          tileColor: isSelected
+                              ? AppColors.primary.withValues(alpha: 0.04)
+                              : null,
+                          onTap: () => widget.onSelected(c),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1882,22 +2198,22 @@ class _SearchableDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<T>(
         value: selected,
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(fontSize: 13),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1917,95 +2233,111 @@ class _SearchableDropdown<T> extends StatelessWidget {
   }
 }
 
-// -- Visa Image Slot -----------------------------------------------------------
-class _VisaImageSlot extends StatelessWidget {
+// -- Image Tile ----------------------------------------------------------------
+class _ImageTile extends StatelessWidget {
   final String label;
   final String? imagePath;
   final VoidCallback onTap;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
-  const _VisaImageSlot({
+  const _ImageTile({
     required this.label,
     required this.imagePath,
     required this.onTap,
-    required this.onRemove,
+    this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = imagePath != null && imagePath!.isNotEmpty;
     return GestureDetector(
-      onTap: imagePath == null ? onTap : null,
-      child: Container(
-        // Auto height when image shown so full image is visible
-        height: imagePath != null ? null : 110,
-        constraints: const BoxConstraints(minHeight: 110),
-        decoration: BoxDecoration(
-          color: imagePath != null
-              ? Colors.transparent
-              : AppColors.backgroundLight,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: imagePath != null ? AppColors.primary : Colors.grey[300]!,
-            width: imagePath != null ? 2 : 1,
-          ),
-        ),
-        child: imagePath != null
-            ? Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Image.file(
-                        File(imagePath!),
-                        width: double.infinity,
-                        fit: BoxFit.contain, // full image, no cropping
+      onTap: onTap,
+      child: SizedBox(
+        height: 110,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: hasImage
+                  ? Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary, width: 2),
                       ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: GestureDetector(
-                      onTap: onRemove,
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.file(File(imagePath!), fit: BoxFit.cover),
+                    )
+                  : CustomPaint(
+                      painter: _DashedBorderPainter(
+                        color: Colors.grey[400]!,
+                        radius: 12,
+                        dashWidth: 6,
+                        dashSpace: 4,
+                        strokeWidth: 1.5,
+                      ),
                       child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundLight,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 16,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate_outlined,
+                              color: Colors.grey[400],
+                              size: 32,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
                     ),
+            ),
+            if (hasImage)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
                   ),
-                ],
-              )
-            : Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.add_photo_alternate_outlined,
-                      color: Colors.grey[400],
-                      size: 32,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      label,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                  child: const Icon(Icons.check, color: Colors.white, size: 12),
                 ),
               ),
+            if (hasImage && onRemove != null)
+              Positioned(
+                top: 4,
+                left: 4,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2217,5 +2549,591 @@ class _DistrictDropdown extends StatelessWidget {
         isExpanded: true,
       ),
     );
+  }
+}
+
+// -- Dashed Border Painter -----------------------------------------------------
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+  final double dashWidth;
+  final double dashSpace;
+  final double strokeWidth;
+
+  const _DashedBorderPainter({
+    required this.color,
+    this.radius = 12,
+    this.dashWidth = 6,
+    this.dashSpace = 4,
+    this.strokeWidth = 1.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            strokeWidth / 2,
+            strokeWidth / 2,
+            size.width - strokeWidth,
+            size.height - strokeWidth,
+          ),
+          Radius.circular(radius),
+        ),
+      );
+
+    final metrics = path.computeMetrics();
+    for (final metric in metrics) {
+      double distance = 0;
+      bool draw = true;
+      while (distance < metric.length) {
+        final double len = draw ? dashWidth : dashSpace;
+        if (draw) {
+          canvas.drawPath(metric.extractPath(distance, distance + len), paint);
+        }
+        distance += len;
+        draw = !draw;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.dashSpace != dashSpace ||
+      oldDelegate.strokeWidth != strokeWidth;
+}
+
+// ── City search field ─────────────────────────────────────────────────────────
+/// A tappable field that opens a searchable city bottom sheet.
+/// The selected city name is written back to [controller.text].
+class _CitySearchField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _CitySearchField({required this.label, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: InkWell(
+            onTap: () => _showCitySheet(context),
+            borderRadius: BorderRadius.circular(12),
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: label,
+                labelStyle: const TextStyle(fontSize: 13),
+                suffixIcon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+              ),
+              child: Text(
+                value.text.isEmpty ? '' : value.text,
+                style: const TextStyle(fontSize: 15),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCitySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CitySearchSheet(
+        label: label,
+        current: controller.text,
+        onSelected: (city) {
+          Navigator.pop(context);
+          controller.text = city;
+        },
+      ),
+    );
+  }
+}
+
+class _CitySearchSheet extends StatefulWidget {
+  final String label;
+  final String current;
+  final ValueChanged<String> onSelected;
+
+  const _CitySearchSheet({
+    required this.label,
+    required this.current,
+    required this.onSelected,
+  });
+
+  @override
+  State<_CitySearchSheet> createState() => _CitySearchSheetState();
+}
+
+class _CitySearchSheetState extends State<_CitySearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<String> _filtered = [];
+
+  static const _cities = [
+    'Abu Dhabi',
+    'Accra',
+    'Addis Ababa',
+    'Adelaide',
+    'Ahmedabad',
+    'Almaty',
+    'Amsterdam',
+    'Ankara',
+    'Athens',
+    'Atlanta',
+    'Auckland',
+    'Baghdad',
+    'Baku',
+    'Bangkok',
+    'Barcelona',
+    'Beijing',
+    'Beirut',
+    'Belgrade',
+    'Berlin',
+    'Bogota',
+    'Brisbane',
+    'Brussels',
+    'Bucharest',
+    'Budapest',
+    'Buenos Aires',
+    'Cairo',
+    'Calgary',
+    'Cape Town',
+    'Caracas',
+    'Casablanca',
+    'Chennai',
+    'Chicago',
+    'Colombo',
+    'Copenhagen',
+    'Dakar',
+    'Dallas',
+    'Damascus',
+    'Dar es Salaam',
+    'Delhi',
+    'Denver',
+    'Dhaka',
+    'Doha',
+    'Dubai',
+    'Dublin',
+    'Edinburgh',
+    'Frankfurt',
+    'Geneva',
+    'Guatemala City',
+    'Hamburg',
+    'Hanoi',
+    'Harare',
+    'Havana',
+    'Helsinki',
+    'Ho Chi Minh City',
+    'Hong Kong',
+    'Houston',
+    'Hyderabad',
+    'Istanbul',
+    'Jakarta',
+    'Johannesburg',
+    'Kabul',
+    'Kampala',
+    'Karachi',
+    'Kathmandu',
+    'Khartoum',
+    'Kiev',
+    'Kinshasa',
+    'Kolkata',
+    'Kuala Lumpur',
+    'Kuwait City',
+    'Lagos',
+    'Lahore',
+    'Lima',
+    'Lisbon',
+    'London',
+    'Los Angeles',
+    'Luanda',
+    'Lusaka',
+    'Luxembourg',
+    'Lyon',
+    'Madrid',
+    'Manila',
+    'Melbourne',
+    'Mexico City',
+    'Miami',
+    'Milan',
+    'Minneapolis',
+    'Minsk',
+    'Mogadishu',
+    'Montreal',
+    'Moscow',
+    'Mumbai',
+    'Muscat',
+    'Nairobi',
+    'New York',
+    'Nicosia',
+    'Oslo',
+    'Ottawa',
+    'Paris',
+    'Perth',
+    'Philadelphia',
+    'Prague',
+    'Pune',
+    'Riyadh',
+    'Rome',
+    'San Francisco',
+    'Santiago',
+    'Sao Paulo',
+    'Seattle',
+    'Seoul',
+    'Shanghai',
+    'Singapore',
+    'Sofia',
+    'Stockholm',
+    'Sydney',
+    'Taipei',
+    'Tashkent',
+    'Tehran',
+    'Tel Aviv',
+    'Tokyo',
+    'Toronto',
+    'Tripoli',
+    'Tunis',
+    'Vancouver',
+    'Vienna',
+    'Warsaw',
+    'Washington DC',
+    'Wellington',
+    'Yangon',
+    'Yerevan',
+    'Zagreb',
+    'Zurich',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = _cities;
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.toLowerCase();
+      setState(() {
+        _filtered = q.isEmpty
+            ? _cities
+            : _cities.where((c) => c.toLowerCase().contains(q)).toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.location_city_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimaryLight,
+                          ),
+                        ),
+                        Text(
+                          '${_filtered.length} cities',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search city…',
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey[400],
+                    size: 20,
+                  ),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: () => _searchCtrl.clear(),
+                          color: Colors.grey[400],
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFFF5F7FA),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 48,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No cities found',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: _filtered.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, indent: 64),
+                      itemBuilder: (_, i) {
+                        final city = _filtered[i];
+                        final isSelected = city == widget.current;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 2,
+                          ),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.12)
+                                  : const Color(0xFFF0F2F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.location_city_outlined,
+                              size: 18,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                          title: Text(
+                            city,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                )
+                              : null,
+                          tileColor: isSelected
+                              ? AppColors.primary.withValues(alpha: 0.04)
+                              : null,
+                          onTap: () => widget.onSelected(city),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Time Field ────────────────────────────────────────────────────────────────
+class _TimeField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _TimeField({required this.label, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GestureDetector(
+        onTap: () => _pickTime(context),
+        child: AbsorbPointer(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: const TextStyle(fontSize: 13),
+              suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    TimeOfDay initial = TimeOfDay.now();
+    final parts = controller.text.split(':');
+    if (parts.length == 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+    }
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null) {
+      controller.text =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    }
   }
 }

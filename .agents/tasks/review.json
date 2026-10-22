@@ -1,0 +1,9 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    "Silent extraction failure — When extraction fails (no face detected and heuristic also fails, or decode error), the user sees an empty profile slot with no explanation. Add a transient snackbar or inline hint when extraction returns null.",
+    "Concurrent extraction filename collision — The fixed filename `profile_latest.jpg` assumes one scan per directory. If two scans run in parallel they'll overwrite each other. Use a unique suffix (timestamp or random hex) or accept the risk if concurrent scans in the same directory are impossible.",
+    "Unused cleanup parameter — `previousProfilePath` is declared but never passed by callers. Either remove it (the fixed filename already prevents accumulation) or wire it through the scan pages to clean up the prior extraction when retaking the passport front."
+  ],
+  "reviewDoc": "c:\\Users\\SARAN\\Documents\\Work\\ZerosnapProd\\.agents\\tasks\\2026-10-21-203232-review.md"
+}
