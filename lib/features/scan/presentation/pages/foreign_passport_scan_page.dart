@@ -199,6 +199,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Selected visa document type ────────────────────────────────────────────
   VisaDocumentType? _selectedVisaDocType;
 
+  // ── OCI front scan orientation toggle ─────────────────────────────────────
+  // false = landscape (card held horizontally), true = portrait (card held vertically)
+  bool _ociPortrait = false;
+
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
   String? _backImagePath;
@@ -448,6 +452,10 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
       if (_currentStep == _ScanStep.diplomatVisa) {
         // Portrait orientation for diplomat visa (2:3 ratio) - always vertical
+        rectW = screenW * 0.70;
+        rectH = rectW * 1.5;
+      } else if (_currentStep == _ScanStep.ociCardFront && _ociPortrait) {
+        // Portrait orientation for OCI front when user toggled to portrait
         rectW = screenW * 0.70;
         rectH = rectW * 1.5;
       } else {
@@ -1055,6 +1063,22 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 analysisLabel: _analysisLabel,
                 elapsedSeconds: _elapsedSeconds,
                 usePortraitForDiplomat: true, // Always portrait for diplomat
+                ociPortrait: _ociPortrait,
+              ),
+
+            // ── OCI orientation toggle (OCI front step only) ────────────────
+            if (_currentStep == _ScanStep.ociCardFront && !_isAnalysing)
+              Positioned(
+                top: MediaQuery.of(context).size.height * 0.24,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _OrientationToggle(
+                    isPortrait: _ociPortrait,
+                    onChanged: (portrait) =>
+                        setState(() => _ociPortrait = portrait),
+                  ),
+                ),
               ),
 
             // ── Top bar ─────────────────────────────────────────────────────
@@ -1269,6 +1293,7 @@ class _ScanOverlay extends StatelessWidget {
   final String analysisLabel;
   final double elapsedSeconds;
   final bool usePortraitForDiplomat;
+  final bool ociPortrait;
 
   const _ScanOverlay({
     required this.step,
@@ -1276,24 +1301,29 @@ class _ScanOverlay extends StatelessWidget {
     required this.analysisLabel,
     required this.elapsedSeconds,
     required this.usePortraitForDiplomat,
+    this.ociPortrait = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    // Scan rect dimensions depend on whether portrait or landscape orientation
+    // Scan rect dimensions depend on orientation
     final double rectW;
     final double rectH;
 
     if (step == _ScanStep.diplomatVisa && usePortraitForDiplomat) {
       // Portrait orientation for diplomat visa (2:3 ratio - taller than wide)
-      rectW = size.width * 0.70; // Slightly narrower for portrait
-      rectH = rectW * 1.5; // 2:3 ratio (portrait)
+      rectW = size.width * 0.70;
+      rectH = rectW * 1.5;
+    } else if (step == _ScanStep.ociCardFront && ociPortrait) {
+      // Portrait orientation for OCI front when user toggled to portrait
+      rectW = size.width * 0.70;
+      rectH = rectW * 1.5; // 2:3 ratio
     } else {
       // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
       rectW = size.width * 0.88;
-      rectH = rectW * 0.66; // 3:2 ratio (landscape)
+      rectH = rectW * 0.66;
     }
 
     final rectLeft = (size.width - rectW) / 2;
@@ -2000,4 +2030,94 @@ class _PortraitPassportPreset implements CropAspectRatioPresetData {
 
   @override
   String get name => '2:3';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orientation toggle — shown above the scan rect on the OCI front step
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrientationToggle extends StatelessWidget {
+  final bool isPortrait;
+  final ValueChanged<bool> onChanged;
+
+  const _OrientationToggle({required this.isPortrait, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.60),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ToggleOption(
+            icon: Icons.crop_landscape_rounded,
+            label: 'Horizontal',
+            selected: !isPortrait,
+            onTap: () => onChanged(false),
+          ),
+          const SizedBox(width: 4),
+          _ToggleOption(
+            icon: Icons.crop_portrait_rounded,
+            label: 'Vertical',
+            selected: isPortrait,
+            onTap: () => onChanged(true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToggleOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ToggleOption({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : Colors.white60,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : Colors.white60,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
