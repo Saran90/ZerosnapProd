@@ -1,0 +1,7 @@
+{
+  "task_id": "task-form-revamp",
+  "task_description": "Revamp passport_form_page.dart and card_scan_page.dart: add new state variables/controllers, reorganise sections into 4-5 named vertical cards (no tabs), add new fields (FRRO App ID, Arrival Date in State, Company, Designation, Persons/Adults/Children, Employed in India, Duration in India, Mode of Payment), replace free-text Arrived From Country with country dropdown, move portrait + signature into ID Card Images section, apply accent-border section-card design, dashed-border image tiles, required-field asterisks, and update submit maps + dispose(). FEAT-001 covers shared helper widgets; FEAT-002 covers passport_form_page.dart; FEAT-003 covers card_scan_page.dart.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

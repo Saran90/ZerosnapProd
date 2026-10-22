@@ -1,0 +1,21 @@
+{
+  "project_type": "Flutter mobile app (Android/iOS) – hotel guest registration / FRRO compliance",
+  "language": "Dart / Flutter",
+  "build_system": "Flutter SDK ^3.11.1. No custom build scripts. Standard 'flutter build' pipeline. pubspec.yaml at workspace root.",
+  "test_framework": "No automated tests found for form pages. Manual smoke-test by running 'flutter run' on device/emulator.",
+  "build_command": "flutter build apk --debug   OR   flutter analyze",
+  "test_command": "flutter analyze   (no unit tests for form pages; verify by hot-reload on device)",
+  "verification_instructions": "1) Run 'flutter analyze' from c:\\Users\\SARAN\\Documents\\Work\\ZerosnapProd – must produce 0 errors. 2) Run 'flutter build apk --debug' – must succeed. 3) Launch on device/emulator, open Passport form and Domestic Card form, confirm all new sections render, new fields are present, image tiles show dashed border when empty and green badge when filled, required fields show red asterisk.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Windows host. Use powershell. Path separator is \\. Flutter SDK must be on PATH. Never modify pubspec.yaml packages (all needed packages already present: flutter, image_picker, flutter/services.dart for FilteringTextInputFormatter).",
+  "contribution_requirements": "No AGENTS.md or CONTRIBUTING.md found. Maintain existing code style (private underscore prefix for state, trailing commas, const where possible). All changes stay in lib/features/scan/presentation/pages/. Shared widget classes stay at bottom of each page file (not extracted to separate files) to match existing pattern.",
+  "key_patterns": "Both pages define private widget classes at the bottom of the same file (_FormField, _DateField, _DropdownField, _CountryDropdown, _SearchableDropdown, _VisaImageSlot, _SectionHeader in passport; _ImageTile, _FormField, _DateField, _DropdownField in card_scan). card_scan uses a function _sectionHeader() rather than a class. Both use OutlineInputBorder with radius 10, padding 16 bottom per field. AppColors.accent = Color(0xFFB18D4F), AppColors.textPrimaryLight = Color(0xFF1A1A2E), AppColors.primary = Color(0xFF02132F), AppColors.success = Color(0xFF34A853). Existing build methods: passport has _buildPortraitCard(), _buildPassportCard(), _buildTravelCard(), _buildVisaCard(), _buildSignatureCard(). card_scan has _buildImagesCard(), _buildDetailsCard(), _buildStayCard(), _buildSignatureCard().",
+  "relevant_files": [
+    "lib/features/scan/presentation/pages/passport_form_page.dart",
+    "lib/features/scan/presentation/pages/card_scan_page.dart",
+    "lib/features/scan/data/repositories/passport_repository.dart",
+    "lib/features/scan/domain/entities/lookup_models.dart",
+    "lib/core/theme/app_colors.dart"
+  ],
+  "directory_structure": "lib/core/theme/ – AppColors, lib/core/widgets/ – shared dialogs, lib/features/scan/data/repositories/ – PassportRepository + CardScanRepository, lib/features/scan/domain/entities/ – lookup_models.dart (MrzCountry, Purpose, VisaType, VisaSubType, IndianState, IndianDistrict), lib/features/scan/presentation/pages/ – form pages, lib/features/scan/presentation/widgets/ – SignaturePadPage, DuplicateGuestChecker."
+}
