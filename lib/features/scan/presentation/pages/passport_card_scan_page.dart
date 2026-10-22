@@ -232,10 +232,21 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
                 _selectedDropVisaType = _visaDropTypes
                     .where((v) => v.visaId == 'OCI')
                     .firstOrNull;
-              } else if (_visaType == 'e-Visa' || _visaType == 'Diplomat') {
+              } else if (_visaType == 'e-Visa') {
                 _selectedDropVisaType = _visaDropTypes
                     .where((v) => v.visaId == 'EV')
                     .firstOrNull;
+              } else if (_visaType == 'Diplomat') {
+                _selectedDropVisaType =
+                    _visaDropTypes.where((v) => v.visaId == 'DP').firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'DV').firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'D').firstOrNull ??
+                    _visaDropTypes
+                        .where(
+                          (v) =>
+                              v.visaTypeName.toLowerCase().contains('diplomat'),
+                        )
+                        .firstOrNull;
               }
             } else if (widget.initialVisaImagePath != null) {
               if (widget.initialVisaImageBackPath != null ||
@@ -293,6 +304,12 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         // Only set default visa drop type if no visa was pre-selected from
         // the scan page. If _visaType is already set (e-Visa / OCI / Diplomat),
         // re-apply the correct mapping now that the list is loaded.
+        // Log available visa types so we know the real IDs from the API
+        debugPrint('Available visa types from API:');
+        for (final v in _visaDropTypes) {
+          debugPrint('  visaId=${v.visaId}  name=${v.visaTypeName}');
+        }
+
         if (_visaType.isEmpty) {
           _selectedDropVisaType = _visaDropTypes
               .where((v) => v.visaId == 'T')
@@ -301,10 +318,21 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           _selectedDropVisaType = _visaDropTypes
               .where((v) => v.visaId == 'OCI')
               .firstOrNull;
-        } else if (_visaType == 'e-Visa' || _visaType == 'Diplomat') {
+        } else if (_visaType == 'e-Visa') {
           _selectedDropVisaType = _visaDropTypes
               .where((v) => v.visaId == 'EV')
               .firstOrNull;
+        } else if (_visaType == 'Diplomat') {
+          // Try known IDs, then fall back to name match
+          _selectedDropVisaType =
+              _visaDropTypes.where((v) => v.visaId == 'DP').firstOrNull ??
+              _visaDropTypes.where((v) => v.visaId == 'DV').firstOrNull ??
+              _visaDropTypes.where((v) => v.visaId == 'D').firstOrNull ??
+              _visaDropTypes
+                  .where(
+                    (v) => v.visaTypeName.toLowerCase().contains('diplomat'),
+                  )
+                  .firstOrNull;
         }
       });
     } catch (_) {}
@@ -1070,6 +1098,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'EV')
             .firstOrNull;
+      } else if (type == 'Diplomat') {
+        _selectedDropVisaType =
+            _visaDropTypes.where((v) => v.visaId == 'DP').firstOrNull ??
+            _visaDropTypes.where((v) => v.visaId == 'DV').firstOrNull ??
+            _visaDropTypes.where((v) => v.visaId == 'D').firstOrNull ??
+            _visaDropTypes
+                .where((v) => v.visaTypeName.toLowerCase().contains('diplomat'))
+                .firstOrNull;
       } else {
         _selectedDropVisaType = _visaDropTypes
             .where((v) => v.visaId == 'T')
