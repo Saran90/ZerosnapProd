@@ -1098,7 +1098,7 @@ class _CardScanPageState extends State<CardScanPage> {
         Row(
           children: [
             Expanded(
-              flex: 7,
+              flex: 6,
               child: _DateField(
                 label: 'Arrival in hotel',
                 controller: _arrivalInHotelDateCtrl,
@@ -1116,7 +1116,7 @@ class _CardScanPageState extends State<CardScanPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              flex: 3,
+              flex: 4,
               child: _TimeField(
                 label: 'Time',
                 controller: _arrivalInHotelTimeCtrl,

@@ -1195,7 +1195,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         Row(
           children: [
             Expanded(
-              flex: 7,
+              flex: 6,
               child: _DateField(
                 label: 'Arrival in India',
                 controller: _arrivalInIndiaCtrl,
@@ -1213,7 +1213,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              flex: 3,
+              flex: 4,
               child: _TimeField(label: 'Time', controller: _arrivalTimeCtrl),
             ),
           ],
@@ -1242,7 +1242,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
         Row(
           children: [
             Expanded(
-              flex: 7,
+              flex: 6,
               child: _DateField(
                 label: 'Arrival in hotel',
                 controller: _hotelArrivalDateCtrl,
@@ -1261,7 +1261,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              flex: 3,
+              flex: 4,
               child: _TimeField(
                 label: 'Time',
                 controller: _hotelArrivalTimeCtrl,
