@@ -1228,7 +1228,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
           selected: _selectedArrivedFromCountry,
           onChanged: (c) => setState(() => _selectedArrivedFromCountry = c),
         ),
-        _FormField(
+        _CitySearchField(
           label: 'Arrived from city',
           controller: _arrivedFromCityCtrl,
         ),
@@ -2463,4 +2463,322 @@ class _DashedBorderPainter extends CustomPainter {
       oldDelegate.dashWidth != dashWidth ||
       oldDelegate.dashSpace != dashSpace ||
       oldDelegate.strokeWidth != strokeWidth;
+}
+
+// ── City search field ─────────────────────────────────────────────────────────
+/// A tappable field that opens a searchable city bottom sheet.
+/// The selected city name is written back to [controller.text].
+class _CitySearchField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _CitySearchField({required this.label, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: InkWell(
+            onTap: () => _showCitySheet(context),
+            borderRadius: BorderRadius.circular(12),
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: label,
+                labelStyle: const TextStyle(fontSize: 13),
+                suffixIcon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+              ),
+              child: Text(
+                value.text.isEmpty ? '' : value.text,
+                style: const TextStyle(fontSize: 15),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCitySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CitySearchSheet(
+        label: label,
+        current: controller.text,
+        onSelected: (city) {
+          Navigator.pop(context);
+          controller.text = city;
+        },
+      ),
+    );
+  }
+}
+
+class _CitySearchSheet extends StatefulWidget {
+  final String label;
+  final String current;
+  final ValueChanged<String> onSelected;
+
+  const _CitySearchSheet({
+    required this.label,
+    required this.current,
+    required this.onSelected,
+  });
+
+  @override
+  State<_CitySearchSheet> createState() => _CitySearchSheetState();
+}
+
+class _CitySearchSheetState extends State<_CitySearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<String> _filtered = [];
+
+  static const _cities = [
+    'Abu Dhabi',
+    'Accra',
+    'Addis Ababa',
+    'Adelaide',
+    'Ahmedabad',
+    'Almaty',
+    'Amsterdam',
+    'Ankara',
+    'Athens',
+    'Atlanta',
+    'Auckland',
+    'Baghdad',
+    'Baku',
+    'Bangkok',
+    'Barcelona',
+    'Beijing',
+    'Beirut',
+    'Belgrade',
+    'Berlin',
+    'Bogota',
+    'Brisbane',
+    'Brussels',
+    'Bucharest',
+    'Budapest',
+    'Buenos Aires',
+    'Cairo',
+    'Calgary',
+    'Cape Town',
+    'Caracas',
+    'Casablanca',
+    'Chennai',
+    'Chicago',
+    'Colombo',
+    'Copenhagen',
+    'Dakar',
+    'Dallas',
+    'Damascus',
+    'Dar es Salaam',
+    'Delhi',
+    'Denver',
+    'Dhaka',
+    'Doha',
+    'Dubai',
+    'Dublin',
+    'Edinburgh',
+    'Frankfurt',
+    'Geneva',
+    'Guatemala City',
+    'Hamburg',
+    'Hanoi',
+    'Harare',
+    'Havana',
+    'Helsinki',
+    'Ho Chi Minh City',
+    'Hong Kong',
+    'Houston',
+    'Hyderabad',
+    'Istanbul',
+    'Jakarta',
+    'Johannesburg',
+    'Kabul',
+    'Kampala',
+    'Karachi',
+    'Kathmandu',
+    'Khartoum',
+    'Kiev',
+    'Kinshasa',
+    'Kolkata',
+    'Kuala Lumpur',
+    'Kuwait City',
+    'Lagos',
+    'Lahore',
+    'Lima',
+    'Lisbon',
+    'London',
+    'Los Angeles',
+    'Luanda',
+    'Lusaka',
+    'Luxembourg',
+    'Lyon',
+    'Madrid',
+    'Manila',
+    'Melbourne',
+    'Mexico City',
+    'Miami',
+    'Milan',
+    'Minneapolis',
+    'Minsk',
+    'Mogadishu',
+    'Montreal',
+    'Moscow',
+    'Mumbai',
+    'Muscat',
+    'Nairobi',
+    'New York',
+    'Nicosia',
+    'Oslo',
+    'Ottawa',
+    'Paris',
+    'Perth',
+    'Philadelphia',
+    'Prague',
+    'Pune',
+    'Riyadh',
+    'Rome',
+    'San Francisco',
+    'Santiago',
+    'Sao Paulo',
+    'Seattle',
+    'Seoul',
+    'Shanghai',
+    'Singapore',
+    'Sofia',
+    'Stockholm',
+    'Sydney',
+    'Taipei',
+    'Tashkent',
+    'Tehran',
+    'Tel Aviv',
+    'Tokyo',
+    'Toronto',
+    'Tripoli',
+    'Tunis',
+    'Vancouver',
+    'Vienna',
+    'Warsaw',
+    'Washington DC',
+    'Wellington',
+    'Yangon',
+    'Yerevan',
+    'Zagreb',
+    'Zurich',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = _cities;
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.toLowerCase();
+      setState(() {
+        _filtered = q.isEmpty
+            ? _cities
+            : _cities.where((c) => c.toLowerCase().contains(q)).toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      builder: (_, scrollCtrl) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search city',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: _filtered.length,
+              itemBuilder: (_, i) {
+                final city = _filtered[i];
+                final isSelected = city == widget.current;
+                return ListTile(
+                  leading: const Icon(
+                    Icons.location_city_outlined,
+                    size: 20,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                  title: Text(city),
+                  selected: isSelected,
+                  selectedColor: AppColors.primary,
+                  selectedTileColor: AppColors.primary.withValues(alpha: 0.08),
+                  onTap: () => widget.onSelected(city),
+                  trailing: isSelected
+                      ? const Icon(Icons.check_circle, color: AppColors.primary)
+                      : null,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
