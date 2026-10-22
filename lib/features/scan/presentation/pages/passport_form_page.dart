@@ -1214,11 +1214,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
             const SizedBox(width: 8),
             Expanded(
               flex: 3,
-              child: _FormField(
-                label: 'Time',
-                controller: _arrivalTimeCtrl,
-                keyboardType: TextInputType.datetime,
-              ),
+              child: _TimeField(label: 'Time', controller: _arrivalTimeCtrl),
             ),
           ],
         ),
@@ -1266,10 +1262,9 @@ class _PassportFormPageState extends State<PassportFormPage> {
             const SizedBox(width: 8),
             Expanded(
               flex: 3,
-              child: _FormField(
+              child: _TimeField(
                 label: 'Time',
                 controller: _hotelArrivalTimeCtrl,
-                keyboardType: TextInputType.datetime,
               ),
             ),
           ],
@@ -3063,5 +3058,82 @@ class _CitySearchSheetState extends State<_CitySearchSheet> {
         ),
       ),
     );
+  }
+}
+
+// ── Time Field ────────────────────────────────────────────────────────────────
+class _TimeField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _TimeField({required this.label, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GestureDetector(
+        onTap: () => _pickTime(context),
+        child: AbsorbPointer(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: const TextStyle(fontSize: 13),
+              suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    TimeOfDay initial = TimeOfDay.now();
+    final parts = controller.text.split(':');
+    if (parts.length == 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+    }
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null) {
+      controller.text =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    }
   }
 }
