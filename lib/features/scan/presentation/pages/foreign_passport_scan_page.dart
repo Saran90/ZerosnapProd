@@ -19,7 +19,14 @@ import 'passport_card_scan_page.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Which image was retaken in single-step mode.
-enum ScanRetakeTarget { passportFront, passportBack, visa }
+enum ScanRetakeTarget {
+  passportFront,
+  passportBack,
+  visa,
+  ociCardFront,
+  ociCardBack,
+  ociStampPage,
+}
 
 /// Type of visa or entry document selected by the user.
 enum VisaDocumentType { eVisa, ociCard, diplomatPassport, noVisa }
@@ -233,6 +240,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       ScanRetakeTarget.passportFront => _ScanStep.passportFront,
       ScanRetakeTarget.passportBack => _ScanStep.passportBack,
       ScanRetakeTarget.visa => _ScanStep.visa,
+      ScanRetakeTarget.ociCardFront => _ScanStep.ociCardFront,
+      ScanRetakeTarget.ociCardBack => _ScanStep.ociCardBack,
+      ScanRetakeTarget.ociStampPage => _ScanStep.ociStampPage,
       null => _ScanStep.passportFront,
     };
     WidgetsBinding.instance.addObserver(this);
@@ -865,8 +875,19 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     _ociCardFrontImagePath = path;
 
     if (!mounted) return;
-    // Always advance to OCI back step
-    setState(() => _currentStep = _ScanStep.ociCardBack);
+
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      Navigator.of(context).pop(
+        ScanRetakeResult(
+          target: ScanRetakeTarget.ociCardFront,
+          imagePath: path,
+        ),
+      );
+    } else {
+      // Always advance to OCI back step
+      setState(() => _currentStep = _ScanStep.ociCardBack);
+    }
   }
 
   Future<void> _runOciCardBackOcr(String path) async {
@@ -874,8 +895,16 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     _ociCardBackImagePath = path;
 
     if (!mounted) return;
-    // Always advance to stamp page step
-    setState(() => _currentStep = _ScanStep.ociStampPage);
+
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      Navigator.of(context).pop(
+        ScanRetakeResult(target: ScanRetakeTarget.ociCardBack, imagePath: path),
+      );
+    } else {
+      // Always advance to stamp page step
+      setState(() => _currentStep = _ScanStep.ociStampPage);
+    }
   }
 
   Future<void> _runOciStampOcr(String path) async {
@@ -884,16 +913,28 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
     if (!mounted) return;
 
-    // Stop animation and navigate to form
-    _stopElapsedTimer();
-    setState(() => _isAnalysing = false);
+    if (widget.retakeTarget != null) {
+      // Retake mode — pop back with result
+      _stopElapsedTimer();
+      setState(() => _isAnalysing = false);
+      Navigator.of(context).pop(
+        ScanRetakeResult(
+          target: ScanRetakeTarget.ociStampPage,
+          imagePath: path,
+        ),
+      );
+    } else {
+      // Stop animation and navigate to form
+      _stopElapsedTimer();
+      setState(() => _isAnalysing = false);
 
-    // Small delay to ensure dialog dismisses before navigation
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (!mounted) return;
+      // Small delay to ensure dialog dismisses before navigation
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
 
-    // OCI stamp captured — navigate to form with all data
-    _navigateToForm();
+      // OCI stamp captured — navigate to form with all data
+      _navigateToForm();
+    }
   }
 
   /// Extract the nested data map from an OCR response.
@@ -996,6 +1037,14 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       };
     }
 
+    // For the OCI flow the front card image is stored in _ociCardFrontImagePath
+    // (not _visaImagePath, which is only set during e-Visa / Diplomat steps).
+    // Pass the correct path so the form page shows the OCI front image tile.
+    final visaImagePathForForm =
+        _selectedVisaDocType == VisaDocumentType.ociCard
+        ? _ociCardFrontImagePath
+        : _visaImagePath;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PassportCardScanPage(
@@ -1003,7 +1052,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
           pageTitle: 'Passport & VISA',
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
-          initialVisaImagePath: _visaImagePath,
+          initialVisaImagePath: visaImagePathForForm,
           initialVisaImageBackPath: _ociCardBackImagePath,
           initialVisaImageStampPath: _ociStampPageImagePath,
           selectedVisaDocumentType: visaTypeForForm,

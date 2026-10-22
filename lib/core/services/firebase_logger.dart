@@ -116,6 +116,12 @@ class FirebaseLogger {
   }
 
   /// Log a non-fatal error to Crashlytics and Analytics.
+  ///
+  /// In addition to [recordError] (which files the issue in Crashlytics) this
+  /// also calls [FirebaseCrashlytics.log] so the full context — user, screen,
+  /// journey, and the error message — appears as a breadcrumb inside the
+  /// Crashlytics issue. GA4 only surfaces the event name in its standard UI,
+  /// so the breadcrumb is the reliable way to see the detail.
   Future<void> logError(
     dynamic exception,
     StackTrace? stackTrace, {
@@ -125,6 +131,7 @@ class FirebaseLogger {
     // Truncate to 100 chars — Analytics param values have a 100-char limit.
     final errorMessage = _truncate(exception?.toString() ?? 'unknown error');
 
+    // --- Crashlytics custom keys (visible in the issue's Keys tab) ----------
     await FirebaseCrashlytics.instance.setCustomKey(
       'login_email',
       _context.userEmail,
@@ -150,6 +157,21 @@ class FirebaseLogger {
       await FirebaseCrashlytics.instance.setCustomKey('hint', hint);
     }
 
+    // --- Crashlytics breadcrumb log (visible in the issue's Logs tab) -------
+    // This is the human-readable line that shows full detail in Crashlytics,
+    // since GA4 only shows the event name in its dashboard.
+    await FirebaseCrashlytics.instance.log(
+      '[server_error] '
+      'user=${_context.userEmail} (${_context.username}) | '
+      'screen=${_context.screenName} | '
+      'journey=${_context.journeyName} | '
+      'fatal=false | '
+      'ts=$timestamp | '
+      '${hint != null ? 'hint=$hint | ' : ''}'
+      'error=$errorMessage',
+    );
+
+    // --- Crashlytics non-fatal record ---------------------------------------
     await FirebaseCrashlytics.instance.recordError(
       exception,
       stackTrace,
@@ -157,6 +179,7 @@ class FirebaseLogger {
       fatal: false,
     );
 
+    // --- GA4 event (event name visible; params visible in DebugView / BQ) --
     await FirebaseAnalytics.instance.logEvent(
       name: 'server_error',
       parameters: {
@@ -167,12 +190,16 @@ class FirebaseLogger {
         'timestamp': timestamp,
         'error_message': errorMessage,
         'is_fatal': 'false',
+        // ignore: use_null_aware_elements — logEvent requires non-nullable values
         if (hint != null) 'hint': hint,
       },
     );
   }
 
   /// Log a fatal error to Crashlytics and Analytics.
+  ///
+  /// Mirrors [logError] but marks the Crashlytics record as fatal and sets
+  /// [is_fatal] to `'true'` in the GA4 event.
   Future<void> logFatal(
     dynamic exception,
     StackTrace? stackTrace, {
@@ -181,6 +208,7 @@ class FirebaseLogger {
     final timestamp = DateTime.now().toUtc().toIso8601String();
     final errorMessage = _truncate(exception?.toString() ?? 'unknown error');
 
+    // --- Crashlytics custom keys --------------------------------------------
     await FirebaseCrashlytics.instance.setCustomKey(
       'login_email',
       _context.userEmail,
@@ -206,6 +234,19 @@ class FirebaseLogger {
       await FirebaseCrashlytics.instance.setCustomKey('hint', hint);
     }
 
+    // --- Crashlytics breadcrumb log -----------------------------------------
+    await FirebaseCrashlytics.instance.log(
+      '[server_error] '
+      'user=${_context.userEmail} (${_context.username}) | '
+      'screen=${_context.screenName} | '
+      'journey=${_context.journeyName} | '
+      'fatal=true | '
+      'ts=$timestamp | '
+      '${hint != null ? 'hint=$hint | ' : ''}'
+      'error=$errorMessage',
+    );
+
+    // --- Crashlytics fatal record -------------------------------------------
     await FirebaseCrashlytics.instance.recordError(
       exception,
       stackTrace,
@@ -213,6 +254,7 @@ class FirebaseLogger {
       fatal: true,
     );
 
+    // --- GA4 event ----------------------------------------------------------
     await FirebaseAnalytics.instance.logEvent(
       name: 'server_error',
       parameters: {
@@ -223,6 +265,7 @@ class FirebaseLogger {
         'timestamp': timestamp,
         'error_message': errorMessage,
         'is_fatal': 'true',
+        // ignore: use_null_aware_elements — logEvent requires non-nullable values
         if (hint != null) 'hint': hint,
       },
     );

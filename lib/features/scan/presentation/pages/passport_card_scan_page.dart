@@ -811,6 +811,18 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           if (mounted) _fillVisaFromOcr(result.ocrData!);
         }
         break;
+
+      case ScanRetakeTarget.ociCardFront:
+        setState(() => _visaImagePath = result.imagePath);
+        break;
+
+      case ScanRetakeTarget.ociCardBack:
+        setState(() => _visaImageBackPath = result.imagePath);
+        break;
+
+      case ScanRetakeTarget.ociStampPage:
+        setState(() => _visaImageStampPath = result.imagePath);
+        break;
     }
   }
 
@@ -1166,39 +1178,20 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   void _showVisaFrontSheet() {
-    if (_isEVisaOrDiplomat) {
-      _retakeWithScanner(ScanRetakeTarget.visa);
+    if (_isOCI) {
+      _retakeWithScanner(ScanRetakeTarget.ociCardFront);
     } else {
-      _showImageSourceSheet(
-        title: 'OCI Front',
-        onPicked: (src) async {
-          final path = await _captureImage(src);
-          if (path != null && mounted) {
-            setState(() => _visaImagePath = path);
-          }
-        },
-      );
+      // e-Visa / Diplomat — existing scan page retake
+      _retakeWithScanner(ScanRetakeTarget.visa);
     }
   }
 
   void _showVisaBackSheet() {
-    _showImageSourceSheet(
-      title: 'OCI Back',
-      onPicked: (src) async {
-        final path = await _captureImage(src);
-        if (path != null && mounted) setState(() => _visaImageBackPath = path);
-      },
-    );
+    _retakeWithScanner(ScanRetakeTarget.ociCardBack);
   }
 
   void _showVisaStampSheet() {
-    _showImageSourceSheet(
-      title: 'OCI Stamp',
-      onPicked: (src) async {
-        final path = await _captureImage(src);
-        if (path != null && mounted) setState(() => _visaImageStampPath = path);
-      },
-    );
+    _retakeWithScanner(ScanRetakeTarget.ociStampPage);
   }
 
   void _fillVisaFromOcr(Map<String, dynamic> data) {
