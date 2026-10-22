@@ -1976,57 +1976,209 @@ class _CountrySearchSheetState extends State<_CountrySearchSheet> {
       expand: false,
       initialChildSize: 0.75,
       maxChildSize: 0.95,
-      builder: (_, scrollCtrl) => Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 10),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'Search ${widget.label}',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: scrollCtrl,
-              itemCount: _filtered.length,
-              itemBuilder: (_, i) {
-                final c = _filtered[i];
-                final isSelected = widget.selected?.code == c.code;
-                return ListTile(
-                  title: Text(c.name),
-                  subtitle: Text(c.code, style: const TextStyle(fontSize: 12)),
-                  selected: isSelected,
-                  selectedColor: AppColors.primary,
-                  selectedTileColor: AppColors.primary.withValues(alpha: 0.1),
-                  onTap: () => widget.onSelected(c),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: AppColors.primary)
-                      : null,
-                );
-              },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.public_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimaryLight,
+                          ),
+                        ),
+                        Text(
+                          '${_filtered.length} countries',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 16),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search country or code…',
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey[400],
+                    size: 20,
+                  ),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: () => _searchCtrl.clear(),
+                          color: Colors.grey[400],
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFFF5F7FA),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 48,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No countries found',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: _filtered.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, indent: 64),
+                      itemBuilder: (_, i) {
+                        final c = _filtered[i];
+                        final isSelected = widget.selected?.code == c.code;
+                        final initials = c.name.isNotEmpty
+                            ? c.name[0].toUpperCase()
+                            : '?';
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 2,
+                          ),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.12)
+                                  : const Color(0xFFF0F2F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            c.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                          subtitle: Text(
+                            c.code,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                )
+                              : null,
+                          tileColor: isSelected
+                              ? AppColors.primary.withValues(alpha: 0.04)
+                              : null,
+                          onTap: () => widget.onSelected(c),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2723,61 +2875,192 @@ class _CitySearchSheetState extends State<_CitySearchSheet> {
       expand: false,
       initialChildSize: 0.75,
       maxChildSize: 0.95,
-      builder: (_, scrollCtrl) => Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 10),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'Search city',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: scrollCtrl,
-              itemCount: _filtered.length,
-              itemBuilder: (_, i) {
-                final city = _filtered[i];
-                final isSelected = city == widget.current;
-                return ListTile(
-                  leading: const Icon(
-                    Icons.location_city_outlined,
-                    size: 20,
-                    color: AppColors.textSecondaryLight,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.location_city_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
                   ),
-                  title: Text(city),
-                  selected: isSelected,
-                  selectedColor: AppColors.primary,
-                  selectedTileColor: AppColors.primary.withValues(alpha: 0.08),
-                  onTap: () => widget.onSelected(city),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: AppColors.primary)
-                      : null,
-                );
-              },
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimaryLight,
+                          ),
+                        ),
+                        Text(
+                          '${_filtered.length} cities',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 16),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search city…',
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey[400],
+                    size: 20,
+                  ),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: () => _searchCtrl.clear(),
+                          color: Colors.grey[400],
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFFF5F7FA),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 48,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No cities found',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: _filtered.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, indent: 64),
+                      itemBuilder: (_, i) {
+                        final city = _filtered[i];
+                        final isSelected = city == widget.current;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 2,
+                          ),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.12)
+                                  : const Color(0xFFF0F2F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.location_city_outlined,
+                              size: 18,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                          title: Text(
+                            city,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                )
+                              : null,
+                          tileColor: isSelected
+                              ? AppColors.primary.withValues(alpha: 0.04)
+                              : null,
+                          onTap: () => widget.onSelected(city),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
