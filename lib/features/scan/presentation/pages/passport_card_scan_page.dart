@@ -229,9 +229,17 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             if (widget.selectedVisaDocumentType != null) {
               _visaType = widget.selectedVisaDocumentType!;
               if (_visaType == 'OCI') {
-                _selectedDropVisaType = _visaDropTypes
-                    .where((v) => v.visaId == 'OCI')
-                    .firstOrNull;
+                _selectedDropVisaType =
+                    _visaDropTypes
+                        .where((v) => v.visaId == 'OCI')
+                        .firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'O').firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'OC').firstOrNull ??
+                    _visaDropTypes
+                        .where(
+                          (v) => v.visaTypeName.toLowerCase().contains('oci'),
+                        )
+                        .firstOrNull;
               } else if (_visaType == 'e-Visa') {
                 _selectedDropVisaType = _visaDropTypes
                     .where((v) => v.visaId == 'EV')
@@ -252,9 +260,17 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
               if (widget.initialVisaImageBackPath != null ||
                   widget.initialVisaImageStampPath != null) {
                 _visaType = 'OCI';
-                _selectedDropVisaType = _visaDropTypes
-                    .where((v) => v.visaId == 'OCI')
-                    .firstOrNull;
+                _selectedDropVisaType =
+                    _visaDropTypes
+                        .where((v) => v.visaId == 'OCI')
+                        .firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'O').firstOrNull ??
+                    _visaDropTypes.where((v) => v.visaId == 'OC').firstOrNull ??
+                    _visaDropTypes
+                        .where(
+                          (v) => v.visaTypeName.toLowerCase().contains('oci'),
+                        )
+                        .firstOrNull;
               } else {
                 _visaType = 'e-Visa';
                 _selectedDropVisaType = _visaDropTypes
@@ -315,9 +331,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
               .where((v) => v.visaId == 'T')
               .firstOrNull;
         } else if (_visaType == 'OCI') {
-          _selectedDropVisaType = _visaDropTypes
-              .where((v) => v.visaId == 'OCI')
-              .firstOrNull;
+          _selectedDropVisaType =
+              _visaDropTypes.where((v) => v.visaId == 'OCI').firstOrNull ??
+              _visaDropTypes.where((v) => v.visaId == 'O').firstOrNull ??
+              _visaDropTypes.where((v) => v.visaId == 'OC').firstOrNull ??
+              _visaDropTypes
+                  .where((v) => v.visaTypeName.toLowerCase().contains('oci'))
+                  .firstOrNull;
         } else if (_visaType == 'e-Visa') {
           _selectedDropVisaType = _visaDropTypes
               .where((v) => v.visaId == 'EV')
