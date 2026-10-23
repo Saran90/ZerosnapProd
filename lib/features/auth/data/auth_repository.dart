@@ -57,6 +57,8 @@ class AuthRepository {
       await FirebaseLogger.instance.setContext(
         userEmail: result.session!.userEmail,
         username: result.session!.username,
+        hotelName: result.session!.hotelName,
+        country: result.session!.country ?? '',
         journeyName: 'login',
         screenName: 'login_page',
       );

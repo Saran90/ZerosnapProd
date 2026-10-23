@@ -5,12 +5,16 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 class LogContext {
   final String userEmail;
   final String username;
+  final String hotelName;
+  final String country;
   final String journeyName;
   final String screenName;
 
   const LogContext({
     this.userEmail = '',
     this.username = '',
+    this.hotelName = '',
+    this.country = '',
     this.journeyName = '',
     this.screenName = '',
   });
@@ -18,12 +22,16 @@ class LogContext {
   LogContext copyWith({
     String? userEmail,
     String? username,
+    String? hotelName,
+    String? country,
     String? journeyName,
     String? screenName,
   }) {
     return LogContext(
       userEmail: userEmail ?? this.userEmail,
       username: username ?? this.username,
+      hotelName: hotelName ?? this.hotelName,
+      country: country ?? this.country,
       journeyName: journeyName ?? this.journeyName,
       screenName: screenName ?? this.screenName,
     );
@@ -42,12 +50,16 @@ class FirebaseLogger {
   Future<void> setContext({
     String? userEmail,
     String? username,
+    String? hotelName,
+    String? country,
     String? journeyName,
     String? screenName,
   }) async {
     _context = _context.copyWith(
       userEmail: userEmail,
       username: username,
+      hotelName: hotelName,
+      country: country,
       journeyName: journeyName,
       screenName: screenName,
     );
@@ -60,6 +72,14 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.setCustomKey(
       'login_username',
       _context.username,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'hotel_name',
+      _context.hotelName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'country',
+      _context.country,
     );
     await FirebaseCrashlytics.instance.setCustomKey(
       'journey_name',
@@ -79,6 +99,14 @@ class FirebaseLogger {
       value: _context.username,
     );
     await FirebaseAnalytics.instance.setUserProperty(
+      name: 'hotel_name',
+      value: _context.hotelName,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'country',
+      value: _context.country,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
       name: 'journey_name',
       value: _context.journeyName,
     );
@@ -94,6 +122,8 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.setUserIdentifier('');
     await FirebaseCrashlytics.instance.setCustomKey('login_email', '');
     await FirebaseCrashlytics.instance.setCustomKey('login_username', '');
+    await FirebaseCrashlytics.instance.setCustomKey('hotel_name', '');
+    await FirebaseCrashlytics.instance.setCustomKey('country', '');
     await FirebaseCrashlytics.instance.setCustomKey('journey_name', '');
     await FirebaseCrashlytics.instance.setCustomKey('screen_name', '');
 
@@ -103,6 +133,14 @@ class FirebaseLogger {
     );
     await FirebaseAnalytics.instance.setUserProperty(
       name: 'login_username',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'hotel_name',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'country',
       value: null,
     );
     await FirebaseAnalytics.instance.setUserProperty(
@@ -141,6 +179,14 @@ class FirebaseLogger {
       _context.username,
     );
     await FirebaseCrashlytics.instance.setCustomKey(
+      'hotel_name',
+      _context.hotelName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'country',
+      _context.country,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
       'journey_name',
       _context.journeyName,
     );
@@ -163,6 +209,8 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.log(
       '[server_error] '
       'user=${_context.userEmail} (${_context.username}) | '
+      'hotel=${_context.hotelName} | '
+      'country=${_context.country} | '
       'screen=${_context.screenName} | '
       'journey=${_context.journeyName} | '
       'fatal=false | '
@@ -185,6 +233,8 @@ class FirebaseLogger {
       parameters: {
         'login_email': _context.userEmail,
         'login_username': _context.username,
+        'hotel_name': _context.hotelName,
+        'country': _context.country,
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
         'timestamp': timestamp,
@@ -218,6 +268,14 @@ class FirebaseLogger {
       _context.username,
     );
     await FirebaseCrashlytics.instance.setCustomKey(
+      'hotel_name',
+      _context.hotelName,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
+      'country',
+      _context.country,
+    );
+    await FirebaseCrashlytics.instance.setCustomKey(
       'journey_name',
       _context.journeyName,
     );
@@ -238,6 +296,8 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.log(
       '[server_error] '
       'user=${_context.userEmail} (${_context.username}) | '
+      'hotel=${_context.hotelName} | '
+      'country=${_context.country} | '
       'screen=${_context.screenName} | '
       'journey=${_context.journeyName} | '
       'fatal=true | '
@@ -260,6 +320,8 @@ class FirebaseLogger {
       parameters: {
         'login_email': _context.userEmail,
         'login_username': _context.username,
+        'hotel_name': _context.hotelName,
+        'country': _context.country,
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
         'timestamp': timestamp,
