@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../dashboard/presentation/widgets/choose_card_dialog.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/passport_portrait_extractor.dart';
 import '../../data/repositories/card_scan_repository.dart';
 import 'card_scan_page.dart';
 
@@ -42,11 +43,13 @@ class DomesticCardRetakeResult {
   final DomesticCardRetakeTarget target;
   final String imagePath;
   final Map<String, dynamic>? ocrData;
+  final String? profileImagePath;
 
   const DomesticCardRetakeResult({
     required this.target,
     required this.imagePath,
     this.ocrData,
+    this.profileImagePath,
   });
 }
 
@@ -118,6 +121,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
 
   // ── OCR results ───────────────────────────────────────────────────────────
   Map<String, dynamic>? _ocrData;
+  String? _profileImagePath; // auto-extracted portrait (PAN card only)
 
   final _repo = CardScanRepository();
   final _picker = ImagePicker();
@@ -367,8 +371,43 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       if (result.isSuccess && result.data != null) {
         data = result.data;
         _ocrData = data;
+
+        // Auto-extract portrait for PAN card after front image is captured.
+        if (widget.cardType == DomesticCardType.panCard) {
+          _profileImagePath = await extractPanCardPortrait(
+            path,
+            previousProfilePath: _profileImagePath,
+          );
+        }
+        // Auto-extract portrait for Driving Licence after front is captured.
+        if (widget.cardType == DomesticCardType.drivingLicense) {
+          _profileImagePath = await extractDrivingLicencePortrait(
+            path,
+            previousProfilePath: _profileImagePath,
+          );
+        }
+        // Auto-extract portrait for Aadhaar card after front is captured.
+        if (widget.cardType == DomesticCardType.aadhar) {
+          _profileImagePath = await extractAadhaarPortrait(
+            path,
+            previousProfilePath: _profileImagePath,
+          );
+        }
+      } else {
+        // Show the API error message (e.g. "Incorrect ID Card / Quality Low")
+        _showSnack(
+          result.message.isNotEmpty
+              ? result.message
+              : 'Could not read card. Please retake the image.',
+        );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        _showSnack(
+          'Extraction failed. Please check your connection and retry.',
+        );
+      }
+    }
     if (!mounted) return;
     if (widget.retakeTarget != null) {
       Navigator.of(context).pop(
@@ -376,6 +415,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
           target: DomesticCardRetakeTarget.front,
           imagePath: path,
           ocrData: data,
+          profileImagePath: _profileImagePath,
         ),
       );
     } else {
@@ -404,8 +444,21 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
         _ocrData = _ocrData != null
             ? <String, dynamic>{...data!, ..._ocrData!}
             : data;
+      } else {
+        // Show the API error message (e.g. "Incorrect ID Card / Quality Low")
+        _showSnack(
+          result.message.isNotEmpty
+              ? result.message
+              : 'Could not read card. Please retake the image.',
+        );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        _showSnack(
+          'Extraction failed. Please check your connection and retry.',
+        );
+      }
+    }
     if (!mounted) return;
     if (widget.retakeTarget != null) {
       Navigator.of(context).pop(
@@ -436,6 +489,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
           initialFrontImagePath: _frontImagePath,
           initialBackImagePath: _backImagePath,
           initialOcrData: _ocrData,
+          initialProfileImagePath: _profileImagePath,
         ),
       ),
     );

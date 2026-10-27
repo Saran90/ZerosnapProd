@@ -239,3 +239,308 @@ Future<void> deletePortraitExtraction(String? profileImagePath) async {
     );
   }
 }
+
+// ── PAN Card portrait extractor ───────────────────────────────────────────────
+
+/// Automatically extracts the profile photo from a captured PAN card image.
+///
+/// Indian PAN cards have two common layouts:
+/// - **New layout** (2017+): photo on the **left side**, roughly top-left
+///   quadrant (x: 2–22%, y: 20–70% of card height).
+/// - **Old layout** (pre-2017): photo on the **bottom-right** corner
+///   (x: 72–92%, y: 50–95% of card height).
+///
+/// The function first tries ML Kit face detection (works for both layouts).
+/// If no face is found, it tries the new-layout region first, then the
+/// old-layout region as a second fallback.
+///
+/// Returns the file path to the cropped portrait, or null on failure.
+Future<String?> extractPanCardPortrait(
+  String panCardFrontImagePath, {
+  String? previousProfilePath,
+}) async {
+  try {
+    // ── Delete previous extraction ───────────────────────────────────────────
+    if (previousProfilePath != null && previousProfilePath.isNotEmpty) {
+      try {
+        final prev = File(previousProfilePath);
+        if (await prev.exists()) await prev.delete();
+      } catch (_) {}
+    }
+
+    // ── Decode source image ──────────────────────────────────────────────────
+    final bytes = await File(panCardFrontImagePath).readAsBytes();
+    final image = img.decodeImage(bytes);
+    if (image == null) {
+      debugPrint('PanPortraitExtractor: Failed to decode image');
+      return null;
+    }
+
+    final imageWidth = image.width;
+    final imageHeight = image.height;
+
+    // ── Try ML Kit face detection first ─────────────────────────────────────
+    Map<String, int>? cropRect = await _detectFaceAndGetCropRect(
+      panCardFrontImagePath,
+      imageWidth,
+      imageHeight,
+    );
+
+    // ── Fallback: new PAN layout (photo top-left) ────────────────────────────
+    cropRect ??= _getPanNewLayoutCropRect(imageWidth, imageHeight);
+
+    final cropX = cropRect['x']!;
+    final cropY = cropRect['y']!;
+    final cropWidth = cropRect['width']!;
+    final cropHeight = cropRect['height']!;
+
+    if (cropWidth < 40 || cropHeight < 40) {
+      debugPrint('PanPortraitExtractor: Crop too small');
+      return null;
+    }
+
+    // ── Crop and save ────────────────────────────────────────────────────────
+    final cropped = img.copyCrop(
+      image,
+      x: cropX,
+      y: cropY,
+      width: cropWidth,
+      height: cropHeight,
+    );
+
+    final croppedBytes = img.encodeJpg(cropped, quality: 90);
+    final dir = File(panCardFrontImagePath).parent;
+    final outputPath =
+        '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await File(outputPath).writeAsBytes(croppedBytes);
+
+    debugPrint(
+      'PanPortraitExtractor: Saved portrait (${cropWidth}x$cropHeight) → $outputPath',
+    );
+    return outputPath;
+  } on FileSystemException catch (e) {
+    debugPrint('PanPortraitExtractor: File I/O error: $e');
+    return null;
+  } on Exception catch (e) {
+    debugPrint('PanPortraitExtractor: Extraction error: $e');
+    return null;
+  }
+}
+
+/// New PAN card layout (2017+): photo is on the **left side**.
+/// Approximate region: x 2–22%, y 20–70% of the card.
+Map<String, int> _getPanNewLayoutCropRect(int imageWidth, int imageHeight) {
+  final x = (imageWidth * 0.02).round();
+  final y = (imageHeight * 0.20).round();
+  final w = (imageWidth * 0.20).round();
+  final h = (imageHeight * 0.50).round();
+  return {
+    'x': x.clamp(0, imageWidth - 1),
+    'y': y.clamp(0, imageHeight - 1),
+    'width': w.clamp(1, imageWidth - x),
+    'height': h.clamp(1, imageHeight - y),
+  };
+}
+
+// ── Driving Licence portrait extractor ───────────────────────────────────────
+
+/// Automatically extracts the profile photo from a captured Driving Licence
+/// front image.
+///
+/// Indian DL cards have two common layouts:
+/// - **Modern chip-card layout** (majority — Maharashtra, Rajasthan, Delhi,
+///   etc.): photo on the **top-right** corner (x: 65–90%, y: 5–50%).
+/// - **Older/state layout** (Kerala, Arunachal, etc.): photo on the
+///   **top-left** corner (x: 2–28%, y: 5–55%).
+///
+/// ML Kit face detection is tried first and works for both layouts.
+/// If it finds no face the top-right heuristic region is used as fallback
+/// (covers the majority of real-world DL cards).
+///
+/// Returns the file path to the cropped portrait, or null on failure.
+Future<String?> extractDrivingLicencePortrait(
+  String dlFrontImagePath, {
+  String? previousProfilePath,
+}) async {
+  try {
+    // ── Delete previous extraction ───────────────────────────────────────────
+    if (previousProfilePath != null && previousProfilePath.isNotEmpty) {
+      try {
+        final prev = File(previousProfilePath);
+        if (await prev.exists()) await prev.delete();
+      } catch (_) {}
+    }
+
+    // ── Decode source image ──────────────────────────────────────────────────
+    final bytes = await File(dlFrontImagePath).readAsBytes();
+    final image = img.decodeImage(bytes);
+    if (image == null) {
+      debugPrint('DLPortraitExtractor: Failed to decode image');
+      return null;
+    }
+
+    final imageWidth = image.width;
+    final imageHeight = image.height;
+
+    // ── Try ML Kit face detection first ─────────────────────────────────────
+    Map<String, int>? cropRect = await _detectFaceAndGetCropRect(
+      dlFrontImagePath,
+      imageWidth,
+      imageHeight,
+    );
+
+    // ── Fallback: modern chip-card layout (photo top-right) ──────────────────
+    cropRect ??= _getDLTopRightCropRect(imageWidth, imageHeight);
+
+    final cropX = cropRect['x']!;
+    final cropY = cropRect['y']!;
+    final cropWidth = cropRect['width']!;
+    final cropHeight = cropRect['height']!;
+
+    if (cropWidth < 40 || cropHeight < 40) {
+      debugPrint('DLPortraitExtractor: Crop too small');
+      return null;
+    }
+
+    // ── Crop and save ────────────────────────────────────────────────────────
+    final cropped = img.copyCrop(
+      image,
+      x: cropX,
+      y: cropY,
+      width: cropWidth,
+      height: cropHeight,
+    );
+
+    final croppedBytes = img.encodeJpg(cropped, quality: 90);
+    final dir = File(dlFrontImagePath).parent;
+    final outputPath =
+        '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await File(outputPath).writeAsBytes(croppedBytes);
+
+    debugPrint(
+      'DLPortraitExtractor: Saved portrait (${cropWidth}x$cropHeight) → $outputPath',
+    );
+    return outputPath;
+  } on FileSystemException catch (e) {
+    debugPrint('DLPortraitExtractor: File I/O error: $e');
+    return null;
+  } on Exception catch (e) {
+    debugPrint('DLPortraitExtractor: Extraction error: $e');
+    return null;
+  }
+}
+
+/// Modern DL chip-card layout: photo is in the **top-right** corner.
+/// Covers Maharashtra, Rajasthan, Delhi, and most post-2010 state DLs.
+/// Approximate region: x 65–90%, y 5–50%.
+Map<String, int> _getDLTopRightCropRect(int imageWidth, int imageHeight) {
+  final x = (imageWidth * 0.65).round();
+  final y = (imageHeight * 0.05).round();
+  final w = (imageWidth * 0.25).round();
+  final h = (imageHeight * 0.45).round();
+  return {
+    'x': x.clamp(0, imageWidth - 1),
+    'y': y.clamp(0, imageHeight - 1),
+    'width': w.clamp(1, imageWidth - x),
+    'height': h.clamp(1, imageHeight - y),
+  };
+}
+
+// ── Aadhaar card portrait extractor ──────────────────────────────────────────
+
+/// Automatically extracts the profile photo from a captured Aadhaar card
+/// front image.
+///
+/// All physical Aadhaar cards (both old and new designs) place the photo on
+/// the **left side** of the card (x: 2–28%, y: 15–75%).
+///
+/// ML Kit face detection is tried first. If it finds no face the left-side
+/// heuristic region is used as fallback.
+///
+/// Returns the file path to the cropped portrait, or null on failure.
+Future<String?> extractAadhaarPortrait(
+  String aadhaarFrontImagePath, {
+  String? previousProfilePath,
+}) async {
+  try {
+    // ── Delete previous extraction ───────────────────────────────────────────
+    if (previousProfilePath != null && previousProfilePath.isNotEmpty) {
+      try {
+        final prev = File(previousProfilePath);
+        if (await prev.exists()) await prev.delete();
+      } catch (_) {}
+    }
+
+    // ── Decode source image ──────────────────────────────────────────────────
+    final bytes = await File(aadhaarFrontImagePath).readAsBytes();
+    final image = img.decodeImage(bytes);
+    if (image == null) {
+      debugPrint('AadhaarPortraitExtractor: Failed to decode image');
+      return null;
+    }
+
+    final imageWidth = image.width;
+    final imageHeight = image.height;
+
+    // ── Try ML Kit face detection first ─────────────────────────────────────
+    Map<String, int>? cropRect = await _detectFaceAndGetCropRect(
+      aadhaarFrontImagePath,
+      imageWidth,
+      imageHeight,
+    );
+
+    // ── Fallback: left-side region (all physical Aadhaar card designs) ───────
+    cropRect ??= _getAadhaarLeftSideCropRect(imageWidth, imageHeight);
+
+    final cropX = cropRect['x']!;
+    final cropY = cropRect['y']!;
+    final cropWidth = cropRect['width']!;
+    final cropHeight = cropRect['height']!;
+
+    if (cropWidth < 40 || cropHeight < 40) {
+      debugPrint('AadhaarPortraitExtractor: Crop too small');
+      return null;
+    }
+
+    // ── Crop and save ────────────────────────────────────────────────────────
+    final cropped = img.copyCrop(
+      image,
+      x: cropX,
+      y: cropY,
+      width: cropWidth,
+      height: cropHeight,
+    );
+
+    final croppedBytes = img.encodeJpg(cropped, quality: 90);
+    final dir = File(aadhaarFrontImagePath).parent;
+    final outputPath =
+        '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await File(outputPath).writeAsBytes(croppedBytes);
+
+    debugPrint(
+      'AadhaarPortraitExtractor: Saved portrait (${cropWidth}x$cropHeight) → $outputPath',
+    );
+    return outputPath;
+  } on FileSystemException catch (e) {
+    debugPrint('AadhaarPortraitExtractor: File I/O error: $e');
+    return null;
+  } on Exception catch (e) {
+    debugPrint('AadhaarPortraitExtractor: Extraction error: $e');
+    return null;
+  }
+}
+
+/// Left-side fallback for all physical Aadhaar card designs.
+/// Approximate region: x 2–28%, y 15–75%.
+Map<String, int> _getAadhaarLeftSideCropRect(int imageWidth, int imageHeight) {
+  final x = (imageWidth * 0.02).round();
+  final y = (imageHeight * 0.15).round();
+  final w = (imageWidth * 0.26).round();
+  final h = (imageHeight * 0.60).round();
+  return {
+    'x': x.clamp(0, imageWidth - 1),
+    'y': y.clamp(0, imageHeight - 1),
+    'width': w.clamp(1, imageWidth - x),
+    'height': h.clamp(1, imageHeight - y),
+  };
+}
