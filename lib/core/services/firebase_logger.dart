@@ -64,7 +64,9 @@ class FirebaseLogger {
       screenName: screenName,
     );
 
-    await FirebaseCrashlytics.instance.setUserIdentifier(_context.userEmail);
+    await FirebaseCrashlytics.instance.setUserIdentifier(
+      '${_context.userEmail} | ${_context.username} | ${_context.hotelName}',
+    );
     await FirebaseCrashlytics.instance.setCustomKey(
       'login_email',
       _context.userEmail,
@@ -225,6 +227,14 @@ class FirebaseLogger {
       stackTrace,
       reason: hint,
       fatal: false,
+      information: [
+        'user: ${_context.userEmail} (${_context.username})',
+        'hotel: ${_context.hotelName}',
+        'country: ${_context.country}',
+        'screen: ${_context.screenName}',
+        'journey: ${_context.journeyName}',
+        if (hint != null) 'hint: $hint',
+      ],
     );
 
     // --- GA4 event (event name visible; params visible in DebugView / BQ) --
@@ -312,6 +322,14 @@ class FirebaseLogger {
       stackTrace,
       reason: hint,
       fatal: true,
+      information: [
+        'user: ${_context.userEmail} (${_context.username})',
+        'hotel: ${_context.hotelName}',
+        'country: ${_context.country}',
+        'screen: ${_context.screenName}',
+        'journey: ${_context.journeyName}',
+        if (hint != null) 'hint: $hint',
+      ],
     );
 
     // --- GA4 event ----------------------------------------------------------

@@ -25,12 +25,17 @@ class CardScanPage extends StatefulWidget {
   final String? initialBackImagePath;
   final Map<String, dynamic>? initialOcrData;
 
+  /// Auto-extracted profile portrait (PAN card only) — pre-fills the profile
+  /// image slot so the user does not have to crop manually.
+  final String? initialProfileImagePath;
+
   const CardScanPage({
     super.key,
     required this.cardType,
     this.initialFrontImagePath,
     this.initialBackImagePath,
     this.initialOcrData,
+    this.initialProfileImagePath,
   });
 
   @override
@@ -122,6 +127,9 @@ class _CardScanPageState extends State<CardScanPage> {
       _frontImagePath = widget.initialFrontImagePath!;
       if (widget.initialBackImagePath != null) {
         _backImagePath = widget.initialBackImagePath!;
+      }
+      if (widget.initialProfileImagePath != null) {
+        _profileImagePath = widget.initialProfileImagePath!;
       }
       if (widget.initialOcrData != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -318,6 +326,9 @@ class _CardScanPageState extends State<CardScanPage> {
       case DomesticCardRetakeTarget.front:
         setState(() => _frontImagePath = result.imagePath);
         if (result.ocrData != null) _fillFromOcr(result.ocrData!);
+        if (result.profileImagePath != null) {
+          setState(() => _profileImagePath = result.profileImagePath!);
+        }
         break;
       case DomesticCardRetakeTarget.back:
         setState(() => _backImagePath = result.imagePath);
@@ -969,19 +980,14 @@ class _CardScanPageState extends State<CardScanPage> {
   Widget _buildDocumentDetailsCard() {
     return _buildSectionCard(
       icon: Icons.badge_outlined,
-      title: 'DOCUMENT DETAILS',
+      title: 'ID DETAILS',
       children: [
         _FormField(
-          label: 'Document number',
-          controller: _docNoCtrl,
-          required: true,
-        ),
-        _FormField(
-          label: 'First name',
+          label: 'First name (Given name)',
           controller: _firstNameCtrl,
           required: true,
         ),
-        _FormField(label: 'Last name', controller: _lastNameCtrl),
+        _FormField(label: 'Last name (Sur name)', controller: _lastNameCtrl),
         _DropdownField(
           label: 'Gender',
           value: _selectedSex,
@@ -989,13 +995,8 @@ class _CardScanPageState extends State<CardScanPage> {
           onChanged: (v) => setState(() => _selectedSex = v!),
           required: true,
         ),
-        _FormField(
-          label: 'Address',
-          controller: _addressCtrl,
-          keyboardType: TextInputType.streetAddress,
-        ),
         _DateField(
-          label: 'Date of birth',
+          label: 'Date of birth (DD-MM-YYYY)',
           controller: _dobCtrl,
           required: true,
           onTap: () => _pickDate(
@@ -1009,16 +1010,27 @@ class _CardScanPageState extends State<CardScanPage> {
             }),
           ),
         ),
+        _FormField(
+          label: 'Address',
+          controller: _addressCtrl,
+          keyboardType: TextInputType.streetAddress,
+          maxLines: 3,
+        ),
+        _FormField(
+          label: 'Document no',
+          controller: _docNoCtrl,
+          required: true,
+        ),
         // Issuing Date and Expiry Date only for Driving License
         if (widget.cardType == DomesticCardType.drivingLicense) ...[
           _DateField(
-            label: 'Issuing date',
+            label: 'Date of issue (DD-MM-YYYY)',
             controller: _issueDateCtrl,
             onTap: () => _pickDate(
               initial: _issueDate,
               first: DateTime(1950),
               last: DateTime.now(),
-              helpText: 'Issuing Date',
+              helpText: 'Date of Issue',
               onPicked: (d) => setState(() {
                 _issueDate = d;
                 _issueDateCtrl.text = _fmt(d);
@@ -1026,7 +1038,7 @@ class _CardScanPageState extends State<CardScanPage> {
             ),
           ),
           _DateField(
-            label: 'Expiration date',
+            label: 'Expiry date (DD-MM-YYYY)',
             controller: _expiryDateCtrl,
             onTap: () => _pickDate(
               initial: _expiryDate ?? DateTime.now(),
@@ -1040,18 +1052,6 @@ class _CardScanPageState extends State<CardScanPage> {
             ),
           ),
         ],
-        _FormField(
-          label: 'Email',
-          controller: _emailCtrl,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        _FormField(
-          label: 'Phone no',
-          controller: _phoneCtrl,
-          keyboardType: TextInputType.phone,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          required: true,
-        ),
       ],
     );
   }
@@ -1062,30 +1062,6 @@ class _CardScanPageState extends State<CardScanPage> {
       icon: Icons.flight_outlined,
       title: 'TRAVEL DETAILS',
       children: [
-        _FormField(
-          label: 'Duration of stay days',
-          controller: _durationCtrl,
-          keyboardType: TextInputType.numberWithOptions(decimal: false),
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        ),
-        _DateField(
-          label: 'Checkout date',
-          controller: _checkoutCtrl,
-          onTap: () => _pickDate(
-            initial: _checkoutDate,
-            first: DateTime.now(),
-            last: DateTime.now().add(const Duration(days: 365 * 5)),
-            helpText: 'Checkout Date',
-            onPicked: (d) => setState(() {
-              _checkoutDate = d;
-              _checkoutCtrl.text = _fmt(d);
-              _durationCtrl.text = d
-                  .difference(DateTime.now())
-                  .inDays
-                  .toString();
-            }),
-          ),
-        ),
         if (_purposes.isNotEmpty)
           _SearchableDropdown<Purpose>(
             label: 'Purpose of visit',
@@ -1094,6 +1070,12 @@ class _CardScanPageState extends State<CardScanPage> {
             itemLabel: (p) => p.purposeName,
             onChanged: (p) => setState(() => _selectedPurpose = p),
           ),
+        _FormField(
+          label: 'Duration of stay (days)',
+          controller: _durationCtrl,
+          keyboardType: TextInputType.numberWithOptions(decimal: false),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
         // Hotel arrival — 70/30 date + time split
         Row(
           children: [
@@ -1125,7 +1107,25 @@ class _CardScanPageState extends State<CardScanPage> {
           ],
         ),
         _DateField(
-          label: 'Arrival date in state',
+          label: 'Hotel departure (DD-MM-YYYY)',
+          controller: _checkoutCtrl,
+          onTap: () => _pickDate(
+            initial: _checkoutDate,
+            first: DateTime.now(),
+            last: DateTime.now().add(const Duration(days: 365 * 5)),
+            helpText: 'Hotel Departure',
+            onPicked: (d) => setState(() {
+              _checkoutDate = d;
+              _checkoutCtrl.text = _fmt(d);
+              _durationCtrl.text = d
+                  .difference(DateTime.now())
+                  .inDays
+                  .toString();
+            }),
+          ),
+        ),
+        _DateField(
+          label: 'Arrival date in state (DD-MM-YYYY)',
           controller: _arrivalDateInStateCtrl,
           onTap: () => _pickDate(
             initial: null,
@@ -1175,7 +1175,7 @@ class _CardScanPageState extends State<CardScanPage> {
           onChanged: (v) => setState(() => _selectedEmployedInIndia = v),
         ),
         _FormField(
-          label: 'Duration of stay in India days',
+          label: 'Duration of stay in India (days)',
           controller: _durationInIndiaCtrl,
           keyboardType: TextInputType.numberWithOptions(decimal: false),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1185,6 +1185,17 @@ class _CardScanPageState extends State<CardScanPage> {
           value: _selectedModeOfPayment,
           items: const ['Cash', 'Card', 'UPI', 'Online'],
           onChanged: (v) => setState(() => _selectedModeOfPayment = v),
+        ),
+        _FormField(
+          label: 'Email',
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        _FormField(
+          label: 'Phone no',
+          controller: _phoneCtrl,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
       ],
     );
@@ -1396,6 +1407,7 @@ class _FormField extends StatelessWidget {
   final TextInputType keyboardType;
   final bool required;
   final List<TextInputFormatter>? inputFormatters;
+  final int maxLines;
 
   const _FormField({
     required this.label,
@@ -1403,6 +1415,7 @@ class _FormField extends StatelessWidget {
     this.keyboardType = TextInputType.text,
     this.required = false,
     this.inputFormatters,
+    this.maxLines = 1,
   });
 
   @override
@@ -1413,6 +1426,7 @@ class _FormField extends StatelessWidget {
         controller: controller,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
+        maxLines: maxLines,
         decoration: InputDecoration(
           label: RichText(
             text: TextSpan(
