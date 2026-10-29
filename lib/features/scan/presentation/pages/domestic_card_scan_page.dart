@@ -356,60 +356,41 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   }
 
   // ── OCR calls ──────────────────────────────────────────────────────────────
-  Future<void> _runFrontOcr(String path) async {
-    setState(
-      () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
-    );
-    Map<String, dynamic>? data;
-    try {
-      final frontBase64 = base64Encode(await File(path).readAsBytes());
-      final result = await _repo.extract(
-        frontBase64: frontBase64,
-        cardType: widget.cardType.label,
-      );
-      if (!mounted) return;
-      if (result.isSuccess && result.data != null) {
-        data = result.data;
-        _ocrData = data;
 
-        // Auto-extract portrait for PAN card after front image is captured.
-        if (widget.cardType == DomesticCardType.panCard) {
-          _profileImagePath = await extractPanCardPortrait(
-            path,
-            previousProfilePath: _profileImagePath,
-          );
-        }
-        // Auto-extract portrait for Driving Licence after front is captured.
-        if (widget.cardType == DomesticCardType.drivingLicense) {
-          _profileImagePath = await extractDrivingLicencePortrait(
-            path,
-            previousProfilePath: _profileImagePath,
-          );
-        }
-        // Auto-extract portrait for Aadhaar card after front is captured.
-        if (widget.cardType == DomesticCardType.aadhar) {
-          _profileImagePath = await extractAadhaarPortrait(
-            path,
-            previousProfilePath: _profileImagePath,
-          );
-        }
-      } else {
-        // Show the API error message (e.g. "Incorrect ID Card / Quality Low")
-        _showSnack(
-          result.message.isNotEmpty
-              ? result.message
-              : 'Could not read card. Please retake the image.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        _showSnack(
-          'Extraction failed. Please check your connection and retry.',
-        );
-      }
-    }
-    if (!mounted) return;
+  /// Front captured — no API call yet in the full flow.
+  /// Just extract the portrait locally and advance to the back step.
+  /// In retake mode, still calls the API so the caller gets fresh OCR data.
+  Future<void> _runFrontOcr(String path) async {
+    // ── Retake mode: behaves as before (caller expects OCR result) ──────────
     if (widget.retakeTarget != null) {
+      setState(
+        () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
+      );
+      Map<String, dynamic>? data;
+      try {
+        final frontBase64 = base64Encode(await File(path).readAsBytes());
+        final result = await _repo.extract(
+          frontBase64: frontBase64,
+          cardType: widget.cardType.label,
+        );
+        if (!mounted) return;
+        if (result.isSuccess && result.data != null) {
+          data = result.data;
+        } else {
+          _showSnack(
+            result.message.isNotEmpty
+                ? result.message
+                : 'Could not read card. Please retake the image.',
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnack(
+            'Extraction failed. Please check your connection and retry.',
+          );
+        }
+      }
+      if (!mounted) return;
       Navigator.of(context).pop(
         DomesticCardRetakeResult(
           target: DomesticCardRetakeTarget.front,
@@ -418,11 +399,41 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
           profileImagePath: _profileImagePath,
         ),
       );
-    } else {
-      setState(() => _currentStep = _CardStep.back);
+      return;
     }
+
+    // ── Full flow: extract portrait locally, then move to back step ─────────
+    setState(() => _analysisLabel = 'Preparing front image...');
+    try {
+      // Auto-extract portrait for PAN card after front image is captured.
+      if (widget.cardType == DomesticCardType.panCard) {
+        _profileImagePath = await extractPanCardPortrait(
+          path,
+          previousProfilePath: _profileImagePath,
+        );
+      }
+      // Auto-extract portrait for Driving Licence after front is captured.
+      if (widget.cardType == DomesticCardType.drivingLicense) {
+        _profileImagePath = await extractDrivingLicencePortrait(
+          path,
+          previousProfilePath: _profileImagePath,
+        );
+      }
+      // Auto-extract portrait for Aadhaar card after front is captured.
+      if (widget.cardType == DomesticCardType.aadhar) {
+        _profileImagePath = await extractAadhaarPortrait(
+          path,
+          previousProfilePath: _profileImagePath,
+        );
+      }
+    } catch (_) {
+      // Portrait extraction is best-effort — don't block the flow.
+    }
+    if (!mounted) return;
+    setState(() => _currentStep = _CardStep.back);
   }
 
+  /// Back captured — call API with front + back images together.
   Future<void> _runBackOcr(String path) async {
     setState(
       () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
@@ -431,21 +442,18 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     try {
       final frontBase64 = _frontImagePath != null
           ? base64Encode(await File(_frontImagePath!).readAsBytes())
-          : '';
+          : null;
       final backBase64 = base64Encode(await File(path).readAsBytes());
       final result = await _repo.extract(
-        frontBase64: frontBase64,
+        frontBase64: frontBase64 ?? backBase64,
         backBase64: backBase64,
         cardType: widget.cardType.label,
       );
       if (!mounted) return;
       if (result.isSuccess && result.data != null) {
         data = result.data;
-        _ocrData = _ocrData != null
-            ? <String, dynamic>{...data!, ..._ocrData!}
-            : data;
+        _ocrData = data;
       } else {
-        // Show the API error message (e.g. "Incorrect ID Card / Quality Low")
         _showSnack(
           result.message.isNotEmpty
               ? result.message
@@ -473,9 +481,53 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     }
   }
 
-  // ── Skip back ──────────────────────────────────────────────────────────────
+  // ── Skip back: user skipped back scan — call API with front image only ─────
   void _skipBack() {
     if (_currentStep != _CardStep.back) return;
+    _runFrontOnlyOcr();
+  }
+
+  /// Called when the user skips the back step.
+  /// Sends only the front image to the API, then navigates to the form.
+  Future<void> _runFrontOnlyOcr() async {
+    if (_frontImagePath == null) {
+      _navigateToForm();
+      return;
+    }
+    setState(() {
+      _isAnalysing = true;
+      _analysisLabel = 'Extracting ${widget.cardType.label} details...';
+    });
+    _startElapsedTimer();
+    try {
+      final frontBase64 = base64Encode(
+        await File(_frontImagePath!).readAsBytes(),
+      );
+      final result = await _repo.extract(
+        frontBase64: frontBase64,
+        cardType: widget.cardType.label,
+      );
+      if (!mounted) return;
+      if (result.isSuccess && result.data != null) {
+        _ocrData = result.data;
+      } else {
+        _showSnack(
+          result.message.isNotEmpty
+              ? result.message
+              : 'Could not read card. Please retake the image.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack(
+          'Extraction failed. Please check your connection and retry.',
+        );
+      }
+    } finally {
+      _stopElapsedTimer();
+      if (mounted) setState(() => _isAnalysing = false);
+    }
+    if (!mounted) return;
     _navigateToForm();
   }
 

@@ -376,13 +376,30 @@ class _DomesticPassportScanPageState extends State<DomesticPassportScanPage>
     Map<String, dynamic>? data;
     try {
       final base64 = base64Encode(await File(path).readAsBytes());
-      final response = await _repo.extractPassport(frontBase64: base64);
+      final response = await _repo.extractPassportBack(backBase64: base64);
       if (!mounted) return;
       data = _extractOcrData(response);
       if (data != null) {
-        _passportOcrData = _passportOcrData != null
-            ? <String, dynamic>{...data, ..._passportOcrData!}
-            : data;
+        // Merge back OCR into existing front OCR.
+        // Front values win — but if a back field is non-null and the front
+        // had it as null (e.g. Guest_Address), take the back value.
+        if (_passportOcrData != null) {
+          final merged = <String, dynamic>{..._passportOcrData!};
+          for (final entry in data.entries) {
+            final backVal = entry.value;
+            final frontVal = merged[entry.key];
+            final backHasValue =
+                backVal != null && backVal.toString().trim().isNotEmpty;
+            final frontMissing =
+                frontVal == null || frontVal.toString().trim().isEmpty;
+            if (backHasValue && frontMissing) {
+              merged[entry.key] = backVal;
+            }
+          }
+          _passportOcrData = merged;
+        } else {
+          _passportOcrData = data;
+        }
       }
     } catch (_) {}
     if (!mounted) return;

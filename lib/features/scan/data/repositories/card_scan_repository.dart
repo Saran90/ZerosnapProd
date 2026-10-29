@@ -44,6 +44,21 @@ class CardScanRepository {
     return OcrResult.fromJson(response as Map<String, dynamic>);
   }
 
+  /// Sends only the back image for OCR extraction.
+  Future<OcrResult> extractBack({
+    required String backBase64,
+    required String cardType,
+  }) async {
+    final url = await _prefs.getBaseUrl();
+    final response = await _api.post(
+      _ocrEndpoint(cardType),
+      baseUrl: url,
+      body: {'idbackbase64': backBase64},
+      headers: await _authHeaders,
+    );
+    return OcrResult.fromJson(response as Map<String, dynamic>);
+  }
+
   // ── Verify Document ───────────────────────────────────────────────────────
   /// Calls the appropriate verify endpoint for the card type.
   /// Returns the raw response map on success (code 200), throws on failure.

@@ -61,6 +61,7 @@ class AuthRepository {
         country: result.session!.country ?? '',
         journeyName: 'login',
         screenName: 'login_page',
+        apiUrl: result.session!.apiUrl,
       );
     }
 

@@ -60,6 +60,32 @@ class PassportRepository {
     }
   }
 
+  /// POST to /api/Zerosnap/GetGVPassportBack
+  /// Extracts passport data from a base64-encoded back image.
+  /// Always returns the raw response map so callers can read error messages.
+  /// Returns null only if the network/parse fails entirely.
+  Future<Map<String, dynamic>?> extractPassportBack({
+    required String backBase64,
+  }) async {
+    try {
+      final url = await _prefs.getBaseUrl();
+      final apiKey = await _prefs.getApiKey();
+      final response = await _api.post(
+        ApiConstants.extractPassportBack,
+        baseUrl: url,
+        body: {'idbase64': backBase64},
+        headers: {...await _authHeaders, 'IntelliKey': apiKey},
+      );
+      _logLong('extractPassportBack response: $response', name: 'PassportRepo');
+      if (response is Map<String, dynamic>) return response;
+      return null;
+    } on UnauthorisedException {
+      rethrow;
+    } catch (e) {
+      return {'message': e.toString(), 'error': true};
+    }
+  }
+
   /// POST to /api/Zerosnap/GetGVVisa
   /// Extracts visa data from a base64-encoded visa image.
   /// Always returns the raw response map so callers can read error messages.

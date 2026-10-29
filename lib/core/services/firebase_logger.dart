@@ -9,6 +9,7 @@ class LogContext {
   final String country;
   final String journeyName;
   final String screenName;
+  final String apiUrl;
 
   const LogContext({
     this.userEmail = '',
@@ -17,6 +18,7 @@ class LogContext {
     this.country = '',
     this.journeyName = '',
     this.screenName = '',
+    this.apiUrl = '',
   });
 
   LogContext copyWith({
@@ -26,6 +28,7 @@ class LogContext {
     String? country,
     String? journeyName,
     String? screenName,
+    String? apiUrl,
   }) {
     return LogContext(
       userEmail: userEmail ?? this.userEmail,
@@ -34,6 +37,7 @@ class LogContext {
       country: country ?? this.country,
       journeyName: journeyName ?? this.journeyName,
       screenName: screenName ?? this.screenName,
+      apiUrl: apiUrl ?? this.apiUrl,
     );
   }
 }
@@ -54,6 +58,7 @@ class FirebaseLogger {
     String? country,
     String? journeyName,
     String? screenName,
+    String? apiUrl,
   }) async {
     _context = _context.copyWith(
       userEmail: userEmail,
@@ -62,6 +67,7 @@ class FirebaseLogger {
       country: country,
       journeyName: journeyName,
       screenName: screenName,
+      apiUrl: apiUrl,
     );
 
     await FirebaseCrashlytics.instance.setUserIdentifier(
@@ -91,6 +97,7 @@ class FirebaseLogger {
       'screen_name',
       _context.screenName,
     );
+    await FirebaseCrashlytics.instance.setCustomKey('api_url', _context.apiUrl);
 
     await FirebaseAnalytics.instance.setUserProperty(
       name: 'login_email',
@@ -116,6 +123,10 @@ class FirebaseLogger {
       name: 'screen_name',
       value: _context.screenName,
     );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'api_url',
+      value: _context.apiUrl,
+    );
   }
 
   /// Clear all context (call on logout).
@@ -128,6 +139,7 @@ class FirebaseLogger {
     await FirebaseCrashlytics.instance.setCustomKey('country', '');
     await FirebaseCrashlytics.instance.setCustomKey('journey_name', '');
     await FirebaseCrashlytics.instance.setCustomKey('screen_name', '');
+    await FirebaseCrashlytics.instance.setCustomKey('api_url', '');
 
     await FirebaseAnalytics.instance.setUserProperty(
       name: 'login_email',
@@ -151,6 +163,10 @@ class FirebaseLogger {
     );
     await FirebaseAnalytics.instance.setUserProperty(
       name: 'screen_name',
+      value: null,
+    );
+    await FirebaseAnalytics.instance.setUserProperty(
+      name: 'api_url',
       value: null,
     );
   }
@@ -196,6 +212,7 @@ class FirebaseLogger {
       'screen_name',
       _context.screenName,
     );
+    await FirebaseCrashlytics.instance.setCustomKey('api_url', _context.apiUrl);
     await FirebaseCrashlytics.instance.setCustomKey('timestamp', timestamp);
     await FirebaseCrashlytics.instance.setCustomKey(
       'error_message',
@@ -215,6 +232,7 @@ class FirebaseLogger {
       'country=${_context.country} | '
       'screen=${_context.screenName} | '
       'journey=${_context.journeyName} | '
+      'api_url=${_context.apiUrl} | '
       'fatal=false | '
       'ts=$timestamp | '
       '${hint != null ? 'hint=$hint | ' : ''}'
@@ -233,6 +251,7 @@ class FirebaseLogger {
         'country: ${_context.country}',
         'screen: ${_context.screenName}',
         'journey: ${_context.journeyName}',
+        'api_url: ${_context.apiUrl}',
         if (hint != null) 'hint: $hint',
       ],
     );
@@ -247,6 +266,7 @@ class FirebaseLogger {
         'country': _context.country,
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
+        'api_url': _context.apiUrl,
         'timestamp': timestamp,
         'error_message': errorMessage,
         'is_fatal': 'false',
@@ -293,6 +313,7 @@ class FirebaseLogger {
       'screen_name',
       _context.screenName,
     );
+    await FirebaseCrashlytics.instance.setCustomKey('api_url', _context.apiUrl);
     await FirebaseCrashlytics.instance.setCustomKey('timestamp', timestamp);
     await FirebaseCrashlytics.instance.setCustomKey(
       'error_message',
@@ -310,6 +331,7 @@ class FirebaseLogger {
       'country=${_context.country} | '
       'screen=${_context.screenName} | '
       'journey=${_context.journeyName} | '
+      'api_url=${_context.apiUrl} | '
       'fatal=true | '
       'ts=$timestamp | '
       '${hint != null ? 'hint=$hint | ' : ''}'
@@ -328,6 +350,7 @@ class FirebaseLogger {
         'country: ${_context.country}',
         'screen: ${_context.screenName}',
         'journey: ${_context.journeyName}',
+        'api_url: ${_context.apiUrl}',
         if (hint != null) 'hint: $hint',
       ],
     );
@@ -342,6 +365,7 @@ class FirebaseLogger {
         'country': _context.country,
         'journey_name': _context.journeyName,
         'screen_name': _context.screenName,
+        'api_url': _context.apiUrl,
         'timestamp': timestamp,
         'error_message': errorMessage,
         'is_fatal': 'true',
