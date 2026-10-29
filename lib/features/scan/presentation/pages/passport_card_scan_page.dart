@@ -787,17 +787,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       case ScanRetakeTarget.passportBack:
         setState(() => _backImagePath = result.imagePath);
         if (result.ocrData != null) {
-          for (var i = 0; i < 50 && _countries.isEmpty; i++) {
-            await Future.delayed(const Duration(milliseconds: 100));
-          }
-          if (mounted) {
-            final merged = <String, dynamic>{
-              ...result.ocrData!,
-              'Guest_Lastname': _surnameCtrl.text,
-              'Guest_Firstname': _givenNamesCtrl.text,
-              'Guest_DocumentNo': _docNoCtrl.text,
-            };
-            _fillFromOcr(merged);
+          final address =
+              result.ocrData!['Guest_Address']?.toString().trim() ?? '';
+          if (address.isNotEmpty && mounted) {
+            setState(() => _addressCtrl.text = address);
           }
         }
         break;
@@ -923,21 +916,14 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   }
 
   Future<void> _extractPassportWithBackImage() async {
-    if (_frontImagePath.isEmpty) {
-      _showSnack('Please capture the passport front image first');
+    if (_backImagePath.isEmpty) {
+      _showSnack('Please capture the passport back image first');
       return;
     }
     setState(() => _isExtractingOcr = true);
     try {
-      final frontBase64 = base64Encode(
-        await File(_frontImagePath).readAsBytes(),
-      );
-      // ignore: unused_local_variable
-      String? backBase64;
-      if (_backImagePath.isNotEmpty) {
-        backBase64 = base64Encode(await File(_backImagePath).readAsBytes());
-      }
-      final response = await _repo.extractPassport(frontBase64: frontBase64);
+      final backBase64 = base64Encode(await File(_backImagePath).readAsBytes());
+      final response = await _repo.extractPassportBack(backBase64: backBase64);
       if (!mounted) return;
 
       if (response == null) {
@@ -966,22 +952,17 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         );
         return;
       }
-      _fillFromOcr(nested);
-      final anyFilled =
-          _docNoCtrl.text.isNotEmpty ||
-          _surnameCtrl.text.isNotEmpty ||
-          _givenNamesCtrl.text.isNotEmpty;
-      if (anyFilled) {
-        _showSnack('Details extracted successfully', isError: false);
-        await checkAndHandleDuplicate(
-          context,
-          documentNo: _docNoCtrl.text,
-          cardType: GuestCardType.indianPassport,
-        );
+      // The back API only reliably returns Guest_Address — extract it directly
+      // instead of calling _fillFromOcr, which would blank every other field
+      // that the back response returns as null.
+      final address = nested['Guest_Address']?.toString().trim() ?? '';
+      if (address.isNotEmpty) {
+        setState(() => _addressCtrl.text = address);
+        _showSnack('Address extracted successfully', isError: false);
       } else {
         _showSnack(
           response['message'] as String? ??
-              'Could not extract details. Please fill in manually.',
+              'Could not extract address. Please fill in manually.',
         );
       }
     } catch (e) {
