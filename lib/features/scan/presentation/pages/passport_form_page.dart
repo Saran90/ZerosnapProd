@@ -84,7 +84,7 @@ class _PassportFormPageState extends State<PassportFormPage> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _roomNoCtrl = TextEditingController();
-  String _sex = 'M';
+  String? _sex;
   DateTime? _dob, _issuingDate, _expiryDate;
 
   // -- Travel fields ---------------------------------------------------------

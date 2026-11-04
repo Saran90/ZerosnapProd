@@ -15,6 +15,7 @@ import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
 import '../widgets/duplicate_guest_checker.dart';
+import '../widgets/expiry_warning_dialog.dart';
 import '../widgets/signature_pad.dart';
 import 'domestic_passport_scan_page.dart';
 import 'foreign_passport_scan_page.dart';
@@ -117,7 +118,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _roomNoCtrl = TextEditingController();
-  String _sex = 'M';
+  String? _sex;
   DateTime? _dob, _issuingDate, _expiryDate;
 
   // ── Travel fields ─────────────────────────────────────────────────────────
@@ -223,6 +224,13 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
         if (widget.initialVisaOcrData != null) {
           _fillVisaFromOcr(widget.initialVisaOcrData!);
         }
+        debugPrint(
+          '🔍 [ExpiryCheck] After OCR fill — '
+          'passportExpiry="${_expiryDateCtrl.text}" '
+          'visaExpiry="${_visaExpiryDateCtrl.text}" '
+          'showVisaSection=${widget.showVisaSection} '
+          'visaType="$_visaType"',
+        );
         if (_visaType.isEmpty) {
           debugPrint('🔍 Auto-selecting visa type...');
           setState(() {
@@ -304,6 +312,10 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
             debugPrint('✅ Auto-selected: _visaType=$_visaType, _isOCI=$_isOCI');
           });
         }
+        // Show expiry warning on page load if any document has expired.
+        // Small delay to let the setState above settle and render.
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (mounted) await _checkAndShowExpiryWarning();
       });
       return;
     }
@@ -1240,27 +1252,74 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     return null;
   }
 
-  bool _validate() {
+  /// Shows the expiry warning dialog if passport and/or visa have expired.
+  /// This is purely informational — submission proceeds after the user
+  /// taps "Got it".
+  Future<void> _checkAndShowExpiryWarning() async {
+    if (!mounted) return;
+
+    String? passportExpiredDate;
+    String? visaExpiredDate;
+
+    // Check passport expiry
     if (_expiryDateCtrl.text.isNotEmpty &&
         _expiryDateCtrl.text.toLowerCase() != 'unknown') {
       final d = _tryParseDate(_expiryDateCtrl.text);
+      debugPrint(
+        '🔍 [ExpiryCheck] Passport: text="${_expiryDateCtrl.text}" parsed=$d '
+        'isExpired=${d != null && d.isBefore(DateTime.now())}',
+      );
       if (d != null && d.isBefore(DateTime.now())) {
-        _showSnack('Passport expiry date must be in the future');
-        return false;
+        passportExpiredDate = _expiryDateCtrl.text;
       }
+    } else {
+      debugPrint(
+        '🔍 [ExpiryCheck] Passport: skipped (empty or unknown) text="${_expiryDateCtrl.text}"',
+      );
     }
-    if (widget.showVisaSection &&
-        _visaType.isNotEmpty &&
-        _visaType != 'No Visa') {
+
+    // Check visa expiry (only when visa section is shown and expiry date is present)
+    // We intentionally skip the _visaType guard here — if the controller has a
+    // date it means a visa was scanned, regardless of whether the type dropdown
+    // has been auto-resolved yet.
+    if (widget.showVisaSection && _visaType != 'No Visa') {
       if (_visaExpiryDateCtrl.text.isNotEmpty &&
           _visaExpiryDateCtrl.text.toLowerCase() != 'unknown') {
         final d = _tryParseDate(_visaExpiryDateCtrl.text);
+        debugPrint(
+          '🔍 [ExpiryCheck] Visa: text="${_visaExpiryDateCtrl.text}" parsed=$d '
+          'isExpired=${d != null && d.isBefore(DateTime.now())} '
+          'visaType="$_visaType"',
+        );
         if (d != null && d.isBefore(DateTime.now())) {
-          _showSnack('Visa expiry date must be in the future');
-          return false;
+          visaExpiredDate = _visaExpiryDateCtrl.text;
         }
+      } else {
+        debugPrint(
+          '🔍 [ExpiryCheck] Visa: skipped (empty or unknown) text="${_visaExpiryDateCtrl.text}"',
+        );
       }
+    } else {
+      debugPrint(
+        '🔍 [ExpiryCheck] Visa: skipped — showVisaSection=${widget.showVisaSection} visaType="$_visaType"',
+      );
     }
+
+    debugPrint(
+      '🔍 [ExpiryCheck] Result: passportExpired=$passportExpiredDate visaExpired=$visaExpiredDate',
+    );
+
+    if (passportExpiredDate == null && visaExpiredDate == null) return;
+    if (!mounted) return;
+
+    await showExpiryWarningDialog(
+      context,
+      passportExpiredDate: passportExpiredDate,
+      visaExpiredDate: visaExpiredDate,
+    );
+  }
+
+  bool _validate() {
     return true;
   }
 
@@ -1271,6 +1330,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       return;
     }
     if (!_validate()) return;
+    if (!mounted) return;
 
     final isDuplicate = await checkAndHandleDuplicate(
       context,
@@ -1651,7 +1711,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           label: 'Gender',
           value: _sex,
           items: const ['M', 'F', 'O'],
-          onChanged: (v) => setState(() => _sex = v ?? 'M'),
+          onChanged: (v) => setState(() => _sex = v),
           required: true,
         ),
         _DateField(
