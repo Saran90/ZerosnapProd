@@ -133,8 +133,11 @@ class _CardScanPageState extends State<CardScanPage> {
         _profileImagePath = widget.initialProfileImagePath!;
       }
       if (widget.initialOcrData != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           _fillFromOcr(widget.initialOcrData!);
+          // Small delay to let setState in _fillFromOcr settle before checking.
+          await Future.delayed(const Duration(milliseconds: 150));
+          if (mounted) await _checkAndShowExpiryWarning();
         });
       }
     } else {
@@ -626,7 +629,6 @@ class _CardScanPageState extends State<CardScanPage> {
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
     if (!_validate()) return;
-    await _checkAndShowExpiryWarning();
     if (!mounted) return;
 
     // Check for duplicate before submission
@@ -730,15 +732,43 @@ class _CardScanPageState extends State<CardScanPage> {
   /// Informational only — submission proceeds after the user taps "Got it".
   Future<void> _checkAndShowExpiryWarning() async {
     if (!mounted) return;
-    if (_expiryDate == null) return;
-    if (_expiryDate!.isBefore(
-      DateTime.now().subtract(const Duration(days: 1)),
-    )) {
-      await showExpiryWarningDialog(
-        context,
-        documentExpiredDate: _fmt(_expiryDate!),
-      );
+
+    // Parse from the controller text — _expiryDate is only set when the user
+    // manually picks a date via the picker, not when OCR fills the controller.
+    final text = _expiryDateCtrl.text.trim();
+    debugPrint(
+      '🔍 [ExpiryCheck] Card: expiryDateCtrl="$text" _expiryDate=$_expiryDate',
+    );
+
+    if (text.isEmpty || text.toLowerCase() == 'unknown') {
+      debugPrint('🔍 [ExpiryCheck] Card: skipped (empty or unknown)');
+      return;
     }
+
+    // Try parsing DD-MM-YYYY
+    DateTime? parsed;
+    try {
+      final parts = text.split('-');
+      if (parts.length == 3) {
+        parsed = DateTime(
+          int.parse(parts[2]),
+          int.parse(parts[1]),
+          int.parse(parts[0]),
+        );
+      }
+    } catch (_) {}
+
+    debugPrint(
+      '🔍 [ExpiryCheck] Card: parsed=$parsed '
+      'isExpired=${parsed != null && parsed.isBefore(DateTime.now().subtract(const Duration(days: 1)))}',
+    );
+
+    if (parsed == null) return;
+    if (!parsed.isBefore(DateTime.now().subtract(const Duration(days: 1))))
+      return;
+
+    if (!mounted) return;
+    await showExpiryWarningDialog(context, documentExpiredDate: text);
   }
 
   bool _validate() {
