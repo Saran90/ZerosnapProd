@@ -206,9 +206,9 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   // ── Selected visa document type ────────────────────────────────────────────
   VisaDocumentType? _selectedVisaDocType;
 
-  // ── OCI front scan orientation toggle ─────────────────────────────────────
+  // ── Scan orientation toggle ────────────────────────────────────────────────
   // false = landscape (card held horizontally), true = portrait (card held vertically)
-  bool _ociPortrait = false;
+  bool _isPortraitScan = false;
 
   // ── Captured images ────────────────────────────────────────────────────────
   String? _frontImagePath;
@@ -464,8 +464,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         // Portrait orientation for diplomat visa (2:3 ratio) - always vertical
         rectW = screenW * 0.70;
         rectH = rectW * 1.5;
-      } else if (_currentStep == _ScanStep.ociCardFront && _ociPortrait) {
-        // Portrait orientation for OCI front when user toggled to portrait
+      } else if (_isPortraitScan) {
+        // Portrait orientation when user toggled to portrait
         rectW = screenW * 0.70;
         rectH = rectW * 1.5;
       } else {
@@ -564,6 +564,11 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final base64 = base64Encode(await File(path).readAsBytes());
       final response = await _repo.extractPassport(frontBase64: base64);
       if (!mounted) return;
+      final errMsg = _ocrErrorMessage(response);
+      if (errMsg != null) {
+        _showOcrErrorDialog(errMsg);
+        return; // stay on camera
+      }
       final data = _extractOcrData(response);
       if (data != null) {
         _passportOcrData = data;
@@ -603,6 +608,11 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       final base64 = base64Encode(await File(path).readAsBytes());
       final response = await _repo.extractPassportBack(backBase64: base64);
       if (!mounted) return;
+      final errMsg = _ocrErrorMessage(response);
+      if (errMsg != null) {
+        _showOcrErrorDialog(errMsg);
+        return; // stay on camera
+      }
       data = _extractOcrData(response);
       if (data != null) {
         // Merge back OCR into existing front OCR.
@@ -961,6 +971,16 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     return null;
   }
 
+  /// Returns the error message from a failed OCR response, or null if success.
+  String? _ocrErrorMessage(Map<String, dynamic>? response) {
+    if (response == null) return null;
+    final code = response['code'] as int? ?? response['Code'] as int?;
+    if (code == null || code == 200) return null;
+    return response['message'] as String? ??
+        response['Message'] as String? ??
+        'Could not read document. Please retake the image.';
+  }
+
   // ── Visa type selection dialog ─────────────────────────────────────────────
 
   /// Shows a dialog allowing the user to select which type of visa/entry
@@ -1090,6 +1110,79 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
     );
   }
 
+  void _showOcrErrorDialog(String message) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                'Scan Failed',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop(); // dismiss dialog
+                        if (widget.retakeTarget != null) {
+                          Navigator.of(
+                            context,
+                          ).pop(); // retake mode — back to form
+                        } else {
+                          _navigateToForm(); // full flow — go to form
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Retake'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Retake handlers ────────────────────────────────────────────────────────
   void _retakeFront() {
     setState(() {
@@ -1125,22 +1218,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
                 analysisLabel: _analysisLabel,
                 elapsedSeconds: _elapsedSeconds,
                 usePortraitForDiplomat: true, // Always portrait for diplomat
-                ociPortrait: _ociPortrait,
-              ),
-
-            // ── OCI orientation toggle (OCI front step only) ────────────────
-            if (_currentStep == _ScanStep.ociCardFront && !_isAnalysing)
-              Positioned(
-                bottom: 110, // sits above the shutter/gallery controls
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: _OrientationToggle(
-                    isPortrait: _ociPortrait,
-                    onChanged: (portrait) =>
-                        setState(() => _ociPortrait = portrait),
-                  ),
-                ),
+                ociPortrait: _isPortraitScan,
               ),
 
             // ── Top bar ─────────────────────────────────────────────────────
@@ -1279,15 +1357,29 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
             onPressed: () => Navigator.of(context).pop(),
           ),
           const SizedBox(width: 4),
-          Text(
-            widget.retakeTarget != null
-                ? 'Retake · ${_currentStep.label}'
-                : 'Step ${_currentStep.stepNumber(_selectedVisaDocType)} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Text(
+              widget.retakeTarget != null
+                  ? 'Retake · ${_currentStep.label}'
+                  : 'Step ${_currentStep.stepNumber(_selectedVisaDocType)} of ${_currentStep.totalSteps(_selectedVisaDocType)} · ${_currentStep.label}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
             ),
+          ),
+          IconButton(
+            tooltip: _isPortraitScan
+                ? 'Switch to horizontal'
+                : 'Switch to vertical',
+            icon: Icon(
+              _isPortraitScan
+                  ? Icons.stay_current_portrait
+                  : Icons.stay_current_landscape,
+              color: Colors.white,
+            ),
+            onPressed: () => setState(() => _isPortraitScan = !_isPortraitScan),
           ),
         ],
       ),
@@ -1378,18 +1470,18 @@ class _ScanOverlay extends StatelessWidget {
       // Portrait orientation for diplomat visa (2:3 ratio - taller than wide)
       rectW = size.width * 0.70;
       rectH = rectW * 1.5;
-    } else if (step == _ScanStep.ociCardFront && ociPortrait) {
-      // Portrait orientation for OCI front when user toggled to portrait
-      rectW = size.width * 0.70;
-      rectH = rectW * 1.5; // 2:3 ratio
+    } else if (ociPortrait) {
+      // Portrait orientation when user toggled to portrait
+      rectW = size.width * 0.72;
+      rectH = rectW * 1.42;
     } else {
-      // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
+      // Landscape orientation (3:2 ratio)
       rectW = size.width * 0.88;
       rectH = rectW * 0.66;
     }
 
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.30;
+    final rectTop = size.height * 0.20;
 
     // Choose bracket colour per step
     final bracketColor = step.usesGreenBrackets

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'dart:io';
 
 import '../../../../core/config/api_constants.dart';
@@ -41,6 +42,9 @@ class CardScanRepository {
       },
       headers: await _authHeaders,
     );
+    if (cardType == 'Driving License') {
+      dev.log('DL OCR response: ${jsonEncode(response)}', name: 'CardScanRepo');
+    }
     return OcrResult.fromJson(response as Map<String, dynamic>);
   }
 
