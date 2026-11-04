@@ -12,6 +12,7 @@ import '../../data/repositories/card_scan_repository.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
 import '../widgets/duplicate_guest_checker.dart';
+import '../widgets/expiry_warning_dialog.dart';
 import '../widgets/signature_pad.dart';
 import 'domestic_card_scan_page.dart';
 import 'profile_crop_page.dart';
@@ -85,7 +86,7 @@ class _CardScanPageState extends State<CardScanPage> {
   final _durationInIndiaCtrl = TextEditingController();
   String? _selectedModeOfPayment;
 
-  String _selectedSex = 'M';
+  String? _selectedSex;
   DateTime? _dob, _issueDate, _expiryDate;
   DateTime _checkoutDate = DateTime.now().add(const Duration(days: 1));
 
@@ -382,11 +383,15 @@ class _CardScanPageState extends State<CardScanPage> {
       _issueDateCtrl.text =
           (issueDates['LMV'] ?? issueDates['MCWG'] ?? issueDates['TRANS'] ?? '')
               as String;
+    } else if ((data['issue_date'] as String?)?.isNotEmpty == true) {
+      _issueDateCtrl.text = data['issue_date'] as String;
     }
 
     final validity = data['Validity'] as Map<String, dynamic>?;
     if (validity != null) {
       _expiryDateCtrl.text = (validity['NT'] ?? validity['T'] ?? '') as String;
+    } else if ((data['expiry_date'] as String?)?.isNotEmpty == true) {
+      _expiryDateCtrl.text = data['expiry_date'] as String;
     }
 
     final gender = data['gender']?.toString() ?? '';
@@ -621,6 +626,8 @@ class _CardScanPageState extends State<CardScanPage> {
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
     if (!_validate()) return;
+    await _checkAndShowExpiryWarning();
+    if (!mounted) return;
 
     // Check for duplicate before submission
     final isDuplicate = await checkAndHandleDuplicate(
@@ -719,6 +726,21 @@ class _CardScanPageState extends State<CardScanPage> {
     // If loggedIn == true the user can simply tap Submit again.
   }
 
+  /// Shows the expiry warning dialog if the scanned card document has expired.
+  /// Informational only — submission proceeds after the user taps "Got it".
+  Future<void> _checkAndShowExpiryWarning() async {
+    if (!mounted) return;
+    if (_expiryDate == null) return;
+    if (_expiryDate!.isBefore(
+      DateTime.now().subtract(const Duration(days: 1)),
+    )) {
+      await showExpiryWarningDialog(
+        context,
+        documentExpiredDate: _fmt(_expiryDate!),
+      );
+    }
+  }
+
   bool _validate() {
     if (_frontImagePath.isEmpty) {
       _snack('Please capture the ${widget.cardType.label} image');
@@ -734,13 +756,6 @@ class _CardScanPageState extends State<CardScanPage> {
     }
     if (_firstNameCtrl.text.trim().isEmpty) {
       _snack('Please enter a valid first name');
-      return false;
-    }
-    if (_expiryDate != null &&
-        _expiryDate!.isBefore(
-          DateTime.now().subtract(const Duration(days: 1)),
-        )) {
-      _snack('Document expired! Please select a valid expiration date.');
       return false;
     }
     if (_emailCtrl.text.isNotEmpty &&

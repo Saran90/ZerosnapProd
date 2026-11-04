@@ -15,6 +15,7 @@ import '../../../../core/widgets/image_source_dialog.dart';
 import '../../data/repositories/passport_repository.dart';
 import '../../domain/entities/lookup_models.dart';
 import '../widgets/duplicate_guest_checker.dart';
+import '../widgets/expiry_warning_dialog.dart';
 import '../widgets/signature_pad.dart';
 import 'domestic_passport_scan_page.dart';
 import 'foreign_passport_scan_page.dart';
@@ -117,7 +118,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _roomNoCtrl = TextEditingController();
-  String _sex = 'M';
+  String? _sex;
   DateTime? _dob, _issuingDate, _expiryDate;
 
   // ── Travel fields ─────────────────────────────────────────────────────────
@@ -1240,15 +1241,25 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
     return null;
   }
 
-  bool _validate() {
+  /// Shows the expiry warning dialog if passport and/or visa have expired.
+  /// This is purely informational — submission proceeds after the user
+  /// taps "Got it".
+  Future<void> _checkAndShowExpiryWarning() async {
+    if (!mounted) return;
+
+    String? passportExpiredDate;
+    String? visaExpiredDate;
+
+    // Check passport expiry
     if (_expiryDateCtrl.text.isNotEmpty &&
         _expiryDateCtrl.text.toLowerCase() != 'unknown') {
       final d = _tryParseDate(_expiryDateCtrl.text);
       if (d != null && d.isBefore(DateTime.now())) {
-        _showSnack('Passport expiry date must be in the future');
-        return false;
+        passportExpiredDate = _expiryDateCtrl.text;
       }
     }
+
+    // Check visa expiry (only when visa section is shown and a visa is selected)
     if (widget.showVisaSection &&
         _visaType.isNotEmpty &&
         _visaType != 'No Visa') {
@@ -1256,11 +1267,22 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           _visaExpiryDateCtrl.text.toLowerCase() != 'unknown') {
         final d = _tryParseDate(_visaExpiryDateCtrl.text);
         if (d != null && d.isBefore(DateTime.now())) {
-          _showSnack('Visa expiry date must be in the future');
-          return false;
+          visaExpiredDate = _visaExpiryDateCtrl.text;
         }
       }
     }
+
+    if (passportExpiredDate == null && visaExpiredDate == null) return;
+    if (!mounted) return;
+
+    await showExpiryWarningDialog(
+      context,
+      passportExpiredDate: passportExpiredDate,
+      visaExpiredDate: visaExpiredDate,
+    );
+  }
+
+  bool _validate() {
     return true;
   }
 
@@ -1271,6 +1293,8 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
       return;
     }
     if (!_validate()) return;
+    await _checkAndShowExpiryWarning();
+    if (!mounted) return;
 
     final isDuplicate = await checkAndHandleDuplicate(
       context,
@@ -1651,7 +1675,7 @@ class _PassportCardScanPageState extends State<PassportCardScanPage> {
           label: 'Gender',
           value: _sex,
           items: const ['M', 'F', 'O'],
-          onChanged: (v) => setState(() => _sex = v ?? 'M'),
+          onChanged: (v) => setState(() => _sex = v),
           required: true,
         ),
         _DateField(
