@@ -123,6 +123,9 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   Map<String, dynamic>? _ocrData;
   String? _profileImagePath; // auto-extracted portrait (PAN card only)
 
+  // ── Scan orientation toggle ───────────────────────────────────────────────
+  bool _isPortraitScan = false; // default vertical for Voters ID
+
   final _repo = CardScanRepository();
   final _picker = ImagePicker();
 
@@ -133,6 +136,8 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     _currentStep = widget.retakeTarget == DomesticCardRetakeTarget.back
         ? _CardStep.back
         : _CardStep.front;
+    // Voters ID is held vertically by default; all other cards start horizontal
+    _isPortraitScan = widget.cardType == DomesticCardType.votersId;
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
   }
@@ -363,6 +368,18 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   Future<void> _runFrontOcr(String path) async {
     // ── Retake mode: behaves as before (caller expects OCR result) ──────────
     if (widget.retakeTarget != null) {
+      // For Other ID: no OCR in retake mode — pop with image only.
+      if (widget.cardType == DomesticCardType.otherId) {
+        Navigator.of(context).pop(
+          DomesticCardRetakeResult(
+            target: DomesticCardRetakeTarget.front,
+            imagePath: path,
+            ocrData: null,
+            profileImagePath: _profileImagePath,
+          ),
+        );
+        return;
+      }
       setState(
         () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
       );
@@ -377,18 +394,20 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
         if (result.isSuccess && result.data != null) {
           data = result.data;
         } else {
-          _showSnack(
+          _showOcrErrorDialog(
             result.message.isNotEmpty
                 ? result.message
                 : 'Could not read card. Please retake the image.',
           );
+          return; // stay on camera — let finally reset _isAnalysing
         }
       } catch (e) {
         if (mounted) {
-          _showSnack(
+          _showOcrErrorDialog(
             'Extraction failed. Please check your connection and retry.',
           );
         }
+        return; // stay on camera
       }
       if (!mounted) return;
       Navigator.of(context).pop(
@@ -435,6 +454,21 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
 
   /// Back captured — call API with front + back images together.
   Future<void> _runBackOcr(String path) async {
+    // For Other ID: skip OCR entirely.
+    if (widget.cardType == DomesticCardType.otherId) {
+      if (widget.retakeTarget != null) {
+        Navigator.of(context).pop(
+          DomesticCardRetakeResult(
+            target: DomesticCardRetakeTarget.back,
+            imagePath: path,
+            ocrData: null,
+          ),
+        );
+      } else {
+        _navigateToForm();
+      }
+      return;
+    }
     setState(
       () => _analysisLabel = 'Extracting ${widget.cardType.label} details...',
     );
@@ -454,18 +488,20 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
         data = result.data;
         _ocrData = data;
       } else {
-        _showSnack(
+        _showOcrErrorDialog(
           result.message.isNotEmpty
               ? result.message
               : 'Could not read card. Please retake the image.',
         );
+        return; // stay on camera — let finally reset _isAnalysing
       }
     } catch (e) {
       if (mounted) {
-        _showSnack(
+        _showOcrErrorDialog(
           'Extraction failed. Please check your connection and retry.',
         );
       }
+      return; // stay on camera
     }
     if (!mounted) return;
     if (widget.retakeTarget != null) {
@@ -494,6 +530,11 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       _navigateToForm();
       return;
     }
+    // For Other ID: skip OCR entirely — navigate to form directly.
+    if (widget.cardType == DomesticCardType.otherId) {
+      _navigateToForm();
+      return;
+    }
     setState(() {
       _isAnalysing = true;
       _analysisLabel = 'Extracting ${widget.cardType.label} details...';
@@ -511,18 +552,20 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       if (result.isSuccess && result.data != null) {
         _ocrData = result.data;
       } else {
-        _showSnack(
+        _showOcrErrorDialog(
           result.message.isNotEmpty
               ? result.message
               : 'Could not read card. Please retake the image.',
         );
+        return; // stay on camera — finally resets _isAnalysing
       }
     } catch (e) {
       if (mounted) {
-        _showSnack(
+        _showOcrErrorDialog(
           'Extraction failed. Please check your connection and retry.',
         );
       }
+      return; // stay on camera
     } finally {
       _stopElapsedTimer();
       if (mounted) setState(() => _isAnalysing = false);
@@ -555,6 +598,79 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
         content: Text(msg),
         backgroundColor: Colors.red[700],
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showOcrErrorDialog(String message) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                'Scan Failed',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop(); // dismiss dialog
+                        if (widget.retakeTarget != null) {
+                          Navigator.of(
+                            context,
+                          ).pop(); // retake mode — back to form
+                        } else {
+                          _navigateToForm(); // full flow — go to form
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Retake'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -658,10 +774,10 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
 
   Widget _buildScanOverlay(Color bracketColor) {
     final size = MediaQuery.of(context).size;
-    final rectW = size.width * 0.88;
-    final rectH = rectW * 0.66;
+    final rectW = _isPortraitScan ? size.width * 0.72 : size.width * 0.88;
+    final rectH = _isPortraitScan ? rectW * 1.42 : rectW * 0.66;
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.30;
+    final rectTop = size.height * 0.20;
     final rect = Rect.fromLTWH(rectLeft, rectTop, rectW, rectH);
 
     return Stack(
@@ -716,6 +832,18 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+          IconButton(
+            tooltip: _isPortraitScan
+                ? 'Switch to horizontal'
+                : 'Switch to vertical',
+            icon: Icon(
+              _isPortraitScan
+                  ? Icons.stay_current_portrait
+                  : Icons.stay_current_landscape,
+              color: Colors.white,
+            ),
+            onPressed: () => setState(() => _isPortraitScan = !_isPortraitScan),
           ),
         ],
       ),
