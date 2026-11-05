@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_cropper/image_cropper.dart';
 
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/navigation/app_navigator.dart';
@@ -197,12 +198,17 @@ class _CardScanPageState extends State<CardScanPage> {
   // ── Image capture ─────────────────────────────────────────────────────────
 
   /// Front tile tap: first capture → scan page full flow;
-  /// already captured → retake via scan page (front step only).
+  /// already captured → show options (adjust crop or retake).
   void _onFrontImageTap() {
     if (_frontImagePath.isEmpty) {
       _showFrontImageSheet();
     } else {
-      _retakeWithScanner(DomesticCardRetakeTarget.front);
+      _showCardImageOptions(
+        imagePath: _frontImagePath,
+        label: 'Front Image',
+        onCropped: (newPath) => setState(() => _frontImagePath = newPath),
+        onRetake: () => _retakeWithScanner(DomesticCardRetakeTarget.front),
+      );
     }
   }
 
@@ -310,7 +316,122 @@ class _CardScanPageState extends State<CardScanPage> {
 
   /// Back tile tap — always opens scan page in retake mode for back step.
   void _showBackImageSheet() {
-    _retakeWithScanner(DomesticCardRetakeTarget.back);
+    if (_backImagePath.isEmpty) {
+      _retakeWithScanner(DomesticCardRetakeTarget.back);
+    } else {
+      _showCardImageOptions(
+        imagePath: _backImagePath,
+        label: 'Back Image',
+        onCropped: (newPath) => setState(() => _backImagePath = newPath),
+        onRetake: () => _retakeWithScanner(DomesticCardRetakeTarget.back),
+      );
+    }
+  }
+
+  /// Bottom sheet shown when tapping an already-captured card image.
+  /// Options: Adjust Crop (re-crops the existing image) or Retake (camera scan).
+  void _showCardImageOptions({
+    required String imagePath,
+    required String label,
+    required void Function(String newPath) onCropped,
+    required VoidCallback onRetake,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Adjust the crop area or retake the scan',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 20),
+              _ProfileOption(
+                icon: Icons.crop,
+                title: 'Adjust Crop',
+                subtitle: 'Re-crop the captured image',
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final cropped = await ImageCropper().cropImage(
+                    sourcePath: imagePath,
+                    uiSettings: [
+                      AndroidUiSettings(
+                        toolbarTitle: 'Adjust Crop',
+                        toolbarColor: Colors.black,
+                        toolbarWidgetColor: Colors.white,
+                        activeControlsWidgetColor: AppColors.accent,
+                        backgroundColor: Colors.black,
+                        initAspectRatio: CropAspectRatioPreset.ratio3x2,
+                        lockAspectRatio: false,
+                        hideBottomControls: false,
+                        showCropGrid: true,
+                        aspectRatioPresets: [
+                          CropAspectRatioPreset.ratio3x2,
+                          CropAspectRatioPreset.original,
+                        ],
+                        cropStyle: CropStyle.rectangle,
+                      ),
+                      IOSUiSettings(
+                        title: 'Adjust Crop',
+                        cancelButtonTitle: 'Cancel',
+                        doneButtonTitle: 'Use This Area',
+                        aspectRatioPresets: [
+                          CropAspectRatioPreset.ratio3x2,
+                          CropAspectRatioPreset.original,
+                        ],
+                        resetAspectRatioEnabled: true,
+                        aspectRatioLockEnabled: false,
+                      ),
+                    ],
+                  );
+                  if (cropped != null && mounted) {
+                    onCropped(cropped.path);
+                  }
+                },
+              ),
+              const Divider(height: 24),
+              _ProfileOption(
+                icon: Icons.camera_alt_outlined,
+                title: 'Retake',
+                subtitle: 'Scan the card again',
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  onRetake();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Opens [DomesticCardScanPage] in single-step retake mode.
