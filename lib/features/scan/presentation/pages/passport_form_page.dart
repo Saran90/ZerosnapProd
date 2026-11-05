@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/errors/exceptions.dart';
@@ -388,13 +389,136 @@ class _PassportFormPageState extends State<PassportFormPage> {
 
   // -- ID Front image picker -------------------------------------------------
   void _showIdFrontSheet() {
-    _showImageSourceSheet('ID Front', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _idFrontImagePath = path);
-    });
+    if (_idFrontImagePath != null) {
+      _showCardImageOptions(
+        imagePath: _idFrontImagePath!,
+        label: 'ID Front Side',
+        onCropped: (newPath) => setState(() => _idFrontImagePath = newPath),
+        onRetake: () {
+          _showImageSourceSheet('ID Front', (src) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted) {
+              setState(() => _idFrontImagePath = path);
+            }
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet('ID Front', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) setState(() => _idFrontImagePath = path);
+      });
+    }
   }
 
   // -- Visa image pickers ----------------------------------------------------
+
+  /// Bottom sheet shown when tapping an already-captured card/document image.
+  /// Options: Adjust Crop (re-crops the existing image) or Retake/Replace.
+  void _showCardImageOptions({
+    required String imagePath,
+    required String label,
+    required void Function(String newPath) onCropped,
+    required VoidCallback onRetake,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Adjust the crop area or retake the scan',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 20),
+              _ProfileOption(
+                icon: Icons.crop,
+                title: 'Adjust Crop',
+                subtitle: 'Re-crop the captured image',
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final cropped = await ImageCropper().cropImage(
+                    sourcePath: imagePath,
+                    uiSettings: [
+                      AndroidUiSettings(
+                        toolbarTitle: 'Adjust Crop',
+                        toolbarColor: Colors.black,
+                        toolbarWidgetColor: Colors.white,
+                        activeControlsWidgetColor: AppColors.accent,
+                        backgroundColor: Colors.black,
+                        initAspectRatio: CropAspectRatioPreset.ratio3x2,
+                        lockAspectRatio: false,
+                        hideBottomControls: false,
+                        showCropGrid: true,
+                        aspectRatioPresets: [
+                          CropAspectRatioPreset.ratio3x2,
+                          CropAspectRatioPreset.original,
+                        ],
+                        cropStyle: CropStyle.rectangle,
+                      ),
+                      IOSUiSettings(
+                        title: 'Adjust Crop',
+                        cancelButtonTitle: 'Cancel',
+                        doneButtonTitle: 'Use This Area',
+                        aspectRatioPresets: [
+                          CropAspectRatioPreset.ratio3x2,
+                          CropAspectRatioPreset.original,
+                        ],
+                        resetAspectRatioEnabled: true,
+                        aspectRatioLockEnabled: false,
+                      ),
+                    ],
+                  );
+                  if (cropped != null && mounted) {
+                    onCropped(cropped.path);
+                  }
+                },
+              ),
+              const Divider(height: 24),
+              _ProfileOption(
+                icon: Icons.camera_alt_outlined,
+                title: 'Retake / Replace',
+                subtitle: 'Capture or choose a new image',
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  onRetake();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<String?> _pickImageToPath(ImageSource source) async {
     final file = await _picker.pickImage(source: source, imageQuality: 80);
     if (file == null) return null;
@@ -408,31 +532,84 @@ class _PassportFormPageState extends State<PassportFormPage> {
   }
 
   void _showVisaFrontSheet() {
-    _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) {
-        setState(() => _visaImagePath = path);
-        // Automatically extract visa details for e-Visa and Diplomat
-        if (_isEVisaOrDiplomat) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extractVisaFromImage();
+    if (_visaImagePath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImagePath!,
+        label: _isOCI ? 'OCI Front' : 'Visa Image',
+        onCropped: (newPath) => setState(() => _visaImagePath = newPath),
+        onRetake: () {
+          _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (
+            src,
+          ) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted) {
+              setState(() => _visaImagePath = path);
+              // Automatically extract visa details for e-Visa and Diplomat
+              if (_isEVisaOrDiplomat) {
+                await Future.delayed(const Duration(milliseconds: 500));
+                await _extractVisaFromImage();
+              }
+            }
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) {
+          setState(() => _visaImagePath = path);
+          // Automatically extract visa details for e-Visa and Diplomat
+          if (_isEVisaOrDiplomat) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _extractVisaFromImage();
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   void _showVisaBackSheet() {
-    _showImageSourceSheet('OCI Back', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _visaImageBackPath = path);
-    });
+    if (_visaImageBackPath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImageBackPath!,
+        label: 'OCI Back',
+        onCropped: (newPath) => setState(() => _visaImageBackPath = newPath),
+        onRetake: () {
+          _showImageSourceSheet('OCI Back', (src) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted)
+              setState(() => _visaImageBackPath = path);
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet('OCI Back', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) setState(() => _visaImageBackPath = path);
+      });
+    }
   }
 
   void _showVisaStampSheet() {
-    _showImageSourceSheet('OCI Stamp', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _visaImageStampPath = path);
-    });
+    if (_visaImageStampPath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImageStampPath!,
+        label: 'OCI Stamp',
+        onCropped: (newPath) => setState(() => _visaImageStampPath = newPath),
+        onRetake: () {
+          _showImageSourceSheet('OCI Stamp', (src) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted)
+              setState(() => _visaImageStampPath = path);
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet('OCI Stamp', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) setState(() => _visaImageStampPath = path);
+      });
+    }
   }
 
   void _showImageSourceSheet(String title, void Function(ImageSource) onPick) {
@@ -1519,12 +1696,30 @@ class _PassportFormPageState extends State<PassportFormPage> {
               child: _ImageTile(
                 label: 'ID Back Side',
                 imagePath: _backImagePath,
-                onTap: () => _showImageSourceSheet('ID Back', (src) async {
-                  final path = await _pickImageToPath(src);
-                  if (path != null && mounted) {
-                    setState(() => _backImagePath = path);
+                onTap: () {
+                  if (_backImagePath != null) {
+                    _showCardImageOptions(
+                      imagePath: _backImagePath!,
+                      label: 'ID Back Side',
+                      onCropped: (newPath) =>
+                          setState(() => _backImagePath = newPath),
+                      onRetake: () =>
+                          _showImageSourceSheet('ID Back', (src) async {
+                            final path = await _pickImageToPath(src);
+                            if (path != null && mounted) {
+                              setState(() => _backImagePath = path);
+                            }
+                          }),
+                    );
+                  } else {
+                    _showImageSourceSheet('ID Back', (src) async {
+                      final path = await _pickImageToPath(src);
+                      if (path != null && mounted) {
+                        setState(() => _backImagePath = path);
+                      }
+                    });
                   }
-                }),
+                },
                 onRemove: () => setState(() => _backImagePath = null),
               ),
             ),
@@ -2547,6 +2742,71 @@ class _DistrictDropdown extends StatelessWidget {
             .toList(),
         onChanged: enabled ? onChanged : null,
         isExpanded: true,
+      ),
+    );
+  }
+}
+
+// -- Profile Option Row (used in the bottom sheet) ----------------------------
+
+class _ProfileOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF), size: 20),
+          ],
+        ),
       ),
     );
   }

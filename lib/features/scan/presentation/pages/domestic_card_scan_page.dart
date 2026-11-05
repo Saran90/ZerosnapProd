@@ -118,6 +118,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
 
   // ── Screen size cache ──────────────────────────────────────────────────────
   Size? _lastScreenSize;
+  double? _lastSafeAreaTopPadding;
 
   // ── OCR results ───────────────────────────────────────────────────────────
   Map<String, dynamic>? _ocrData;
@@ -309,10 +310,11 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
       final offsetX = (renderedW - screenW) / 2;
       final offsetY = (renderedH - screenH) / 2;
 
-      final rectW = screenW * 0.88;
-      final rectH = rectW * 0.66;
+      final rectW = _isPortraitScan ? screenW * 0.72 : screenW * 0.88;
+      final rectH = _isPortraitScan ? rectW * 1.42 : rectW * 0.66;
       final rectLeft = (screenW - rectW) / 2;
-      final rectTop = screenH * 0.30;
+      final safeTop = _lastSafeAreaTopPadding ?? 0.0;
+      final rectTop = screenH * 0.20 + safeTop;
 
       final cropX = ((rectLeft + offsetX) / scale).round();
       final cropY = ((rectTop + offsetY) / scale).round();
@@ -690,6 +692,7 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
   @override
   Widget build(BuildContext context) {
     _lastScreenSize = MediaQuery.of(context).size;
+    _lastSafeAreaTopPadding = MediaQuery.of(context).padding.top;
     final isBack = _currentStep == _CardStep.back;
     final bracketColor = isBack ? const Color(0xFF4CAF50) : AppColors.accent;
 
@@ -777,7 +780,8 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     final rectW = _isPortraitScan ? size.width * 0.72 : size.width * 0.88;
     final rectH = _isPortraitScan ? rectW * 1.42 : rectW * 0.66;
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.20;
+    final safeTop = MediaQuery.of(context).padding.top;
+    final rectTop = size.height * 0.20 + safeTop;
     final rect = Rect.fromLTWH(rectLeft, rectTop, rectW, rectH);
 
     return Stack(

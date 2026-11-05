@@ -221,6 +221,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
 
   // ── Screen size cache (set in build, used by crop) ────────────────────────
   Size? _lastScreenSize;
+  double? _lastSafeAreaTopPadding;
 
   // ── OCR results ───────────────────────────────────────────────────────────
   Map<String, dynamic>? _passportOcrData; // merged front+back result
@@ -466,8 +467,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         rectH = rectW * 1.5;
       } else if (_isPortraitScan) {
         // Portrait orientation when user toggled to portrait
-        rectW = screenW * 0.70;
-        rectH = rectW * 1.5;
+        rectW = screenW * 0.72;
+        rectH = rectW * 1.42;
       } else {
         // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
         rectW = screenW * 0.88;
@@ -475,7 +476,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
       }
 
       final rectLeft = (screenW - rectW) / 2;
-      final rectTop = screenH * 0.30;
+      final safeTop = _lastSafeAreaTopPadding ?? 0.0;
+      final rectTop = screenH * 0.20 + safeTop;
 
       // ── 6. Map to raw image coordinates ───────────────────────────────────
       // screen_coord = (img_coord * scale) - offset
@@ -1200,6 +1202,7 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
   Widget build(BuildContext context) {
     // Cache screen size for use in the crop calculation
     _lastScreenSize = MediaQuery.of(context).size;
+    _lastSafeAreaTopPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1481,7 +1484,8 @@ class _ScanOverlay extends StatelessWidget {
     }
 
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.20;
+    final safeTop = MediaQuery.of(context).padding.top;
+    final rectTop = size.height * 0.20 + safeTop;
 
     // Choose bracket colour per step
     final bracketColor = step.usesGreenBrackets
