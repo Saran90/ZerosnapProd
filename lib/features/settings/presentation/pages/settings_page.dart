@@ -2,6 +2,7 @@ import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/network/shared_preferences_provider.dart';
 import '../../../../core/router/app_router.dart';
@@ -291,6 +292,28 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: 'Sign out of your account',
                         titleColor: Colors.red,
                         onTap: _logout,
+                        showChevron: false,
+                      ),
+                    ],
+                  ),
+
+                  // ── Support section ───────────────────────────────────────
+                  const SizedBox(height: 16),
+                  _SectionLabel(label: 'Support'),
+                  const SizedBox(height: 8),
+                  _SettingsCard(
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.headset_mic_rounded,
+                        iconColor: Colors.teal,
+                        title: 'Contact Support',
+                        subtitle: '+91 9037507898',
+                        onTap: () async {
+                          final uri = Uri(scheme: 'tel', path: '+919037507898');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
                         showChevron: false,
                       ),
                     ],
