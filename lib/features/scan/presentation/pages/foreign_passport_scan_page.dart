@@ -467,8 +467,8 @@ class _ForeignPassportScanPageState extends State<ForeignPassportScanPage>
         rectH = rectW * 1.5;
       } else if (_isPortraitScan) {
         // Portrait orientation when user toggled to portrait
-        rectW = screenW * 0.70;
-        rectH = rectW * 1.5;
+        rectW = screenW * 0.72;
+        rectH = rectW * 1.42;
       } else {
         // Landscape orientation for passports, OCI, regular visa (3:2 ratio)
         rectW = screenW * 0.88;
@@ -1484,7 +1484,8 @@ class _ScanOverlay extends StatelessWidget {
     }
 
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.20;
+    final safeTop = MediaQuery.of(context).padding.top;
+    final rectTop = size.height * 0.20 + safeTop;
 
     // Choose bracket colour per step
     final bracketColor = step.usesGreenBrackets

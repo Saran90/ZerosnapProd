@@ -532,31 +532,84 @@ class _PassportFormPageState extends State<PassportFormPage> {
   }
 
   void _showVisaFrontSheet() {
-    _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) {
-        setState(() => _visaImagePath = path);
-        // Automatically extract visa details for e-Visa and Diplomat
-        if (_isEVisaOrDiplomat) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _extractVisaFromImage();
+    if (_visaImagePath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImagePath!,
+        label: _isOCI ? 'OCI Front' : 'Visa Image',
+        onCropped: (newPath) => setState(() => _visaImagePath = newPath),
+        onRetake: () {
+          _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (
+            src,
+          ) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted) {
+              setState(() => _visaImagePath = path);
+              // Automatically extract visa details for e-Visa and Diplomat
+              if (_isEVisaOrDiplomat) {
+                await Future.delayed(const Duration(milliseconds: 500));
+                await _extractVisaFromImage();
+              }
+            }
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet(_isOCI ? 'OCI Front' : 'Visa Image', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) {
+          setState(() => _visaImagePath = path);
+          // Automatically extract visa details for e-Visa and Diplomat
+          if (_isEVisaOrDiplomat) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _extractVisaFromImage();
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   void _showVisaBackSheet() {
-    _showImageSourceSheet('OCI Back', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _visaImageBackPath = path);
-    });
+    if (_visaImageBackPath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImageBackPath!,
+        label: 'OCI Back',
+        onCropped: (newPath) => setState(() => _visaImageBackPath = newPath),
+        onRetake: () {
+          _showImageSourceSheet('OCI Back', (src) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted)
+              setState(() => _visaImageBackPath = path);
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet('OCI Back', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) setState(() => _visaImageBackPath = path);
+      });
+    }
   }
 
   void _showVisaStampSheet() {
-    _showImageSourceSheet('OCI Stamp', (src) async {
-      final path = await _pickImageToPath(src);
-      if (path != null && mounted) setState(() => _visaImageStampPath = path);
-    });
+    if (_visaImageStampPath != null) {
+      _showCardImageOptions(
+        imagePath: _visaImageStampPath!,
+        label: 'OCI Stamp',
+        onCropped: (newPath) => setState(() => _visaImageStampPath = newPath),
+        onRetake: () {
+          _showImageSourceSheet('OCI Stamp', (src) async {
+            final path = await _pickImageToPath(src);
+            if (path != null && mounted)
+              setState(() => _visaImageStampPath = path);
+          });
+        },
+      );
+    } else {
+      _showImageSourceSheet('OCI Stamp', (src) async {
+        final path = await _pickImageToPath(src);
+        if (path != null && mounted) setState(() => _visaImageStampPath = path);
+      });
+    }
   }
 
   void _showImageSourceSheet(String title, void Function(ImageSource) onPick) {

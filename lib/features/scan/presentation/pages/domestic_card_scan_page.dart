@@ -780,7 +780,8 @@ class _DomesticCardScanPageState extends State<DomesticCardScanPage>
     final rectW = _isPortraitScan ? size.width * 0.72 : size.width * 0.88;
     final rectH = _isPortraitScan ? rectW * 1.42 : rectW * 0.66;
     final rectLeft = (size.width - rectW) / 2;
-    final rectTop = size.height * 0.20;
+    final safeTop = MediaQuery.of(context).padding.top;
+    final rectTop = size.height * 0.20 + safeTop;
     final rect = Rect.fromLTWH(rectLeft, rectTop, rectW, rectH);
 
     return Stack(
